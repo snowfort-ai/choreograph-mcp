@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Session, ToolResult } from "@sfcg/core";
+import { Session, ToolResult } from "sfcg-mcp-core";
 import { WebDriver, WebLaunchOpts, WebSession } from "./web-driver.js";
 
 export class WebMCPServer {

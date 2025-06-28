@@ -7,10 +7,10 @@ const program = new commander_1.Command();
 program
     .name("sfcg-electron")
     .description("Snowfort Choreograph Electron MCP - Programmatic control of Electron apps for testing and validation")
-    .version("0.1.0")
+    .version("0.2.0")
     .option("--name <name>", "Server name for MCP handshake", "sfcg-electron")
     .action(async (options) => {
-    const server = new electron_server_js_1.ElectronMCPServer(options.name, "0.1.0");
+    const server = new electron_server_js_1.ElectronMCPServer(options.name, "0.2.0");
     await server.run();
 });
 program.parse();

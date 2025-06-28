@@ -1,5 +1,5 @@
 import { Browser, BrowserContext, Page } from "playwright";
-import { Driver, LaunchOpts, Session } from "@sfcg/core";
+import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
 export interface WebLaunchOpts extends LaunchOpts {
     browser?: "chromium" | "firefox" | "webkit";
     headed?: boolean;

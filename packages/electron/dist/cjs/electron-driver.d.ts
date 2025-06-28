@@ -1,5 +1,5 @@
 import { ElectronApplication, Page } from "playwright";
-import { Driver, LaunchOpts, Session } from "@sfcg/core";
+import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
 export interface ElectronLaunchOpts extends LaunchOpts {
     app: string;
     args?: string[];

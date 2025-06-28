@@ -1,5 +1,5 @@
 import { _electron as electron, ElectronApplication, Page } from "playwright";
-import { Driver, LaunchOpts, Session } from "@sfcg/core";
+import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 
