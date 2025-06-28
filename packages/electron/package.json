@@ -1,6 +1,6 @@
 {
   "name": "sfcg-mcp-electron",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Electron automation CLI using Playwright for Snowfort Choreograph",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -28,7 +28,7 @@
     "test": "echo \"No tests yet\""
   },
   "dependencies": {
-    "sfcg-mcp-core": "^0.2.1",
+    "sfcg-mcp-core": "^0.2.2",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "playwright": "^1.40.0",
     "commander": "^11.0.0"

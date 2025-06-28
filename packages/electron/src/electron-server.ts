@@ -1017,7 +1017,15 @@ export class ElectronMCPServer {
   }
 
   async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+    try {
+      console.error("[DEBUG] Starting MCP server...");
+      const transport = new StdioServerTransport();
+      console.error("[DEBUG] Transport created, connecting...");
+      await this.server.connect(transport);
+      console.error("[DEBUG] MCP server connected and running");
+    } catch (error) {
+      console.error("[DEBUG] Error in server.run():", error);
+      throw error;
+    }
   }
 }
