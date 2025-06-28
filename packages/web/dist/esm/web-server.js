@@ -573,8 +573,17 @@ export class WebMCPServer {
         this.sessions.delete(sessionId);
     }
     async run() {
-        const transport = new StdioServerTransport();
-        await this.server.connect(transport);
+        try {
+            console.error("[DEBUG] Starting Web MCP server...");
+            const transport = new StdioServerTransport();
+            console.error("[DEBUG] Transport created, connecting...");
+            await this.server.connect(transport);
+            console.error("[DEBUG] Web MCP server connected and running");
+        }
+        catch (error) {
+            console.error("[DEBUG] Error in web server.run():", error);
+            throw error;
+        }
     }
 }
 //# sourceMappingURL=web-server.js.map

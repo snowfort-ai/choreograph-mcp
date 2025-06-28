@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WebDriver = void 0;
-const playwright_1 = require("playwright");
+const playwright_core_1 = require("playwright-core");
 const crypto_1 = require("crypto");
 class WebDriver {
     async launch(opts) {
@@ -9,13 +9,13 @@ class WebDriver {
         let browserInstance;
         switch (browserType) {
             case "chromium":
-                browserInstance = playwright_1.chromium;
+                browserInstance = playwright_core_1.chromium;
                 break;
             case "firefox":
-                browserInstance = playwright_1.firefox;
+                browserInstance = playwright_core_1.firefox;
                 break;
             case "webkit":
-                browserInstance = playwright_1.webkit;
+                browserInstance = playwright_core_1.webkit;
                 break;
             default:
                 throw new Error(`Unsupported browser: ${browserType}`);

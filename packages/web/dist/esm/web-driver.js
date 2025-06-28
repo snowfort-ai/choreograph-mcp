@@ -1,4 +1,4 @@
-import { chromium, firefox, webkit } from "playwright";
+import { chromium, firefox, webkit } from "playwright-core";
 import { randomUUID } from "crypto";
 export class WebDriver {
     async launch(opts) {

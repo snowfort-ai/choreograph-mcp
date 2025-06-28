@@ -1,4 +1,4 @@
-import { Browser, BrowserContext, Page, chromium, firefox, webkit } from "playwright";
+import { Browser, BrowserContext, Page, chromium, firefox, webkit } from "playwright-core";
 import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
 import { randomUUID } from "crypto";
 
