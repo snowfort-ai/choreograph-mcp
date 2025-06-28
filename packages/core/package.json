@@ -1,5 +1,5 @@
 {
-  "name": "@sfcg/core",
+  "name": "sfcg-mcp-core",
   "version": "0.1.0",
   "description": "Core MCP infrastructure and Driver interface for Snowfort Choreograph",
   "type": "module",
