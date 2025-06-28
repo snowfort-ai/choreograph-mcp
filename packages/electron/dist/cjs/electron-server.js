@@ -1,0 +1,954 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ElectronMCPServer = void 0;
+const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
+const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
+const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
+const electron_driver_js_1 = require("./electron-driver.js");
+class ElectronMCPServer {
+    name;
+    version;
+    server;
+    driver;
+    sessions = new Map();
+    constructor(name, version = "0.1.0") {
+        this.name = name;
+        this.version = version;
+        this.driver = new electron_driver_js_1.ElectronDriver();
+        this.server = new index_js_1.Server({
+            name: this.name,
+            version: this.version,
+        }, {
+            capabilities: {
+                tools: {},
+            },
+        });
+        this.setupHandlers();
+    }
+    setupHandlers() {
+        this.server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => {
+            return {
+                tools: [
+                    {
+                        name: "app_launch",
+                        description: "Launch an Electron application",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                app: {
+                                    type: "string",
+                                    description: "Path to the Electron application executable",
+                                },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                    description: "Command line arguments for the application",
+                                },
+                                env: {
+                                    type: "object",
+                                    description: "Environment variables",
+                                },
+                                cwd: {
+                                    type: "string",
+                                    description: "Working directory",
+                                },
+                                timeout: {
+                                    type: "number",
+                                    description: "Launch timeout in milliseconds",
+                                },
+                            },
+                            required: ["app"],
+                        },
+                    },
+                    {
+                        name: "click",
+                        description: "Click on an element identified by a CSS selector",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the element to click",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector"],
+                        },
+                    },
+                    {
+                        name: "type",
+                        description: "Type text into an element identified by a CSS selector",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the element to type into",
+                                },
+                                text: {
+                                    type: "string",
+                                    description: "Text to type",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector", "text"],
+                        },
+                    },
+                    {
+                        name: "screenshot",
+                        description: "Take a screenshot of the current window",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                path: {
+                                    type: "string",
+                                    description: "Optional path to save the screenshot",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "evaluate",
+                        description: "Execute JavaScript in the application context",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                script: {
+                                    type: "string",
+                                    description: "JavaScript code to execute",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "script"],
+                        },
+                    },
+                    {
+                        name: "wait_for_selector",
+                        description: "Wait for an element to appear in the application",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector to wait for",
+                                },
+                                timeout: {
+                                    type: "number",
+                                    description: "Timeout in milliseconds (default: 30000)",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector"],
+                        },
+                    },
+                    {
+                        name: "ipc_invoke",
+                        description: "Invoke an IPC method in the Electron application",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                channel: {
+                                    type: "string",
+                                    description: "IPC channel name",
+                                },
+                                args: {
+                                    type: "array",
+                                    description: "Arguments to pass to the IPC method",
+                                },
+                            },
+                            required: ["sessionId", "channel"],
+                        },
+                    },
+                    {
+                        name: "get_windows",
+                        description: "Get list of available windows in the Electron application",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "fs_write_file",
+                        description: "Write content to a file",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID",
+                                },
+                                filePath: {
+                                    type: "string",
+                                    description: "Path to the file",
+                                },
+                                content: {
+                                    type: "string",
+                                    description: "Content to write",
+                                },
+                            },
+                            required: ["sessionId", "filePath", "content"],
+                        },
+                    },
+                    {
+                        name: "fs_read_file",
+                        description: "Read content from a file",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID",
+                                },
+                                filePath: {
+                                    type: "string",
+                                    description: "Path to the file",
+                                },
+                            },
+                            required: ["sessionId", "filePath"],
+                        },
+                    },
+                    {
+                        name: "close",
+                        description: "Close an Electron application session",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID to close",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "keyboard_press",
+                        description: "Press a key or key combination",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                key: {
+                                    type: "string",
+                                    description: "Key to press (e.g., 'Enter', 'Tab', 'Escape', 'c')",
+                                },
+                                modifiers: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                    description: "Optional modifier keys (e.g., ['ControlOrMeta'], ['Alt', 'Shift'])",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "key"],
+                        },
+                    },
+                    {
+                        name: "click_by_text",
+                        description: "Click on an element containing specific text",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                text: {
+                                    type: "string",
+                                    description: "Text to search for in elements",
+                                },
+                                exact: {
+                                    type: "boolean",
+                                    description: "Whether to match text exactly (default: false)",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "text"],
+                        },
+                    },
+                    {
+                        name: "add_locator_handler",
+                        description: "Add automatic handler for modals/overlays",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the modal/overlay to handle",
+                                },
+                                action: {
+                                    type: "string",
+                                    enum: ["dismiss", "accept", "click"],
+                                    description: "Action to take when modal appears",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector", "action"],
+                        },
+                    },
+                    {
+                        name: "click_by_role",
+                        description: "Click on an element by its accessibility role",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                role: {
+                                    type: "string",
+                                    description: "Accessibility role (e.g., 'button', 'link', 'tab', 'textbox')",
+                                },
+                                name: {
+                                    type: "string",
+                                    description: "Optional accessible name to filter by",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "role"],
+                        },
+                    },
+                    {
+                        name: "click_nth",
+                        description: "Click on the nth element matching a selector",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the elements",
+                                },
+                                index: {
+                                    type: "number",
+                                    description: "Zero-based index of the element to click",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector", "index"],
+                        },
+                    },
+                    {
+                        name: "keyboard_type",
+                        description: "Type text using keyboard events with optional delay",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                text: {
+                                    type: "string",
+                                    description: "Text to type",
+                                },
+                                delay: {
+                                    type: "number",
+                                    description: "Optional delay between keystrokes in milliseconds",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "text"],
+                        },
+                    },
+                    {
+                        name: "wait_for_load_state",
+                        description: "Wait for the page to reach a specific load state",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                state: {
+                                    type: "string",
+                                    enum: ["load", "domcontentloaded", "networkidle"],
+                                    description: "Load state to wait for (default: 'load')",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "snapshot",
+                        description: "Get accessibility tree snapshot of the current window",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "hover",
+                        description: "Hover over an element identified by a CSS selector",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the element to hover over",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector"],
+                        },
+                    },
+                    {
+                        name: "drag",
+                        description: "Drag an element to a target location",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                sourceSelector: {
+                                    type: "string",
+                                    description: "CSS selector for the element to drag",
+                                },
+                                targetSelector: {
+                                    type: "string",
+                                    description: "CSS selector for the drop target",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "sourceSelector", "targetSelector"],
+                        },
+                    },
+                    {
+                        name: "key",
+                        description: "Press a keyboard key",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                key: {
+                                    type: "string",
+                                    description: "Key to press (e.g., 'Enter', 'Tab', 'Escape')",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "key"],
+                        },
+                    },
+                    {
+                        name: "select",
+                        description: "Select an option from a dropdown",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the select element",
+                                },
+                                value: {
+                                    type: "string",
+                                    description: "Value to select",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector", "value"],
+                        },
+                    },
+                    {
+                        name: "upload",
+                        description: "Upload a file to an input element",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                selector: {
+                                    type: "string",
+                                    description: "CSS selector for the file input element",
+                                },
+                                filePath: {
+                                    type: "string",
+                                    description: "Path to the file to upload",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "selector", "filePath"],
+                        },
+                    },
+                    {
+                        name: "back",
+                        description: "Navigate back in window history",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "forward",
+                        description: "Navigate forward in window history",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "refresh",
+                        description: "Refresh the current window",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "content",
+                        description: "Get the HTML content of the current window",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "text_content",
+                        description: "Get the visible text content of the current window",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                ],
+            };
+        });
+        this.server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
+            const { name, arguments: args } = request.params;
+            try {
+                const toolArgs = args || {};
+                switch (name) {
+                    case "app_launch":
+                        return await this.handleAppLaunch(toolArgs);
+                    case "click":
+                        await this.handleClick(toolArgs.sessionId, toolArgs.selector, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element clicked successfully" }] };
+                    case "type":
+                        await this.handleType(toolArgs.sessionId, toolArgs.selector, toolArgs.text, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Text typed successfully" }] };
+                    case "screenshot":
+                        const screenshotPath = await this.handleScreenshot(toolArgs.sessionId, toolArgs.path, toolArgs.windowId);
+                        return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
+                    case "evaluate":
+                        const evalResult = await this.handleEvaluate(toolArgs.sessionId, toolArgs.script, toolArgs.windowId);
+                        return { content: [{ type: "text", text: `Result: ${JSON.stringify(evalResult)}` }] };
+                    case "wait_for_selector":
+                        await this.handleWaitForSelector(toolArgs.sessionId, toolArgs.selector, toolArgs.timeout, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element found" }] };
+                    case "ipc_invoke":
+                        return await this.handleIpcInvoke(toolArgs.sessionId, toolArgs.channel, toolArgs.args || []);
+                    case "get_windows":
+                        return await this.handleGetWindows(toolArgs.sessionId);
+                    case "fs_write_file":
+                        await this.handleWriteFile(toolArgs.sessionId, toolArgs.filePath, toolArgs.content);
+                        return { content: [{ type: "text", text: "File written successfully" }] };
+                    case "fs_read_file":
+                        return await this.handleReadFile(toolArgs.sessionId, toolArgs.filePath);
+                    case "close":
+                        await this.handleClose(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: "Session closed successfully" }] };
+                    case "keyboard_press":
+                        await this.handleKeyboardPress(toolArgs.sessionId, toolArgs.key, toolArgs.modifiers, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Key pressed successfully" }] };
+                    case "click_by_text":
+                        await this.handleClickByText(toolArgs.sessionId, toolArgs.text, toolArgs.exact, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element clicked by text successfully" }] };
+                    case "add_locator_handler":
+                        await this.handleAddLocatorHandler(toolArgs.sessionId, toolArgs.selector, toolArgs.action, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Locator handler added successfully" }] };
+                    case "click_by_role":
+                        await this.handleClickByRole(toolArgs.sessionId, toolArgs.role, toolArgs.name, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element clicked by role successfully" }] };
+                    case "click_nth":
+                        await this.handleClickNth(toolArgs.sessionId, toolArgs.selector, toolArgs.index, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Nth element clicked successfully" }] };
+                    case "keyboard_type":
+                        await this.handleKeyboardType(toolArgs.sessionId, toolArgs.text, toolArgs.delay, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Text typed successfully" }] };
+                    case "wait_for_load_state":
+                        await this.handleWaitForLoadState(toolArgs.sessionId, toolArgs.state, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Page load state reached" }] };
+                    case "snapshot":
+                        const snapshotResult = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: snapshotResult }] };
+                    case "hover":
+                        await this.handleHover(toolArgs.sessionId, toolArgs.selector, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element hovered successfully" }] };
+                    case "drag":
+                        await this.handleDrag(toolArgs.sessionId, toolArgs.sourceSelector, toolArgs.targetSelector, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Element dragged successfully" }] };
+                    case "key":
+                        await this.handleKey(toolArgs.sessionId, toolArgs.key, toolArgs.windowId);
+                        return { content: [{ type: "text", text: `Key '${toolArgs.key}' pressed successfully` }] };
+                    case "select":
+                        await this.handleSelect(toolArgs.sessionId, toolArgs.selector, toolArgs.value, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Option selected successfully" }] };
+                    case "upload":
+                        await this.handleUpload(toolArgs.sessionId, toolArgs.selector, toolArgs.filePath, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "File uploaded successfully" }] };
+                    case "back":
+                        await this.handleBack(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Navigated back successfully" }] };
+                    case "forward":
+                        await this.handleForward(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Navigated forward successfully" }] };
+                    case "refresh":
+                        await this.handleRefresh(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: "Window refreshed successfully" }] };
+                    case "content":
+                        const htmlContent = await this.handleContent(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: htmlContent }] };
+                    case "text_content":
+                        const textContent = await this.handleTextContent(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [{ type: "text", text: textContent }] };
+                    default:
+                        throw new Error(`Unknown tool: ${name}`);
+                }
+            }
+            catch (error) {
+                return {
+                    content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+                    isError: true,
+                };
+            }
+        });
+    }
+    async getSession(sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`Session not found: ${sessionId}`);
+        }
+        return session;
+    }
+    async handleAppLaunch(args) {
+        const opts = {
+            app: args.app,
+            args: args.args,
+            env: args.env,
+            cwd: args.cwd,
+            timeout: args.timeout,
+        };
+        const session = await this.driver.launch(opts);
+        this.sessions.set(session.id, session);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Electron app launched successfully. Session ID: ${session.id}`,
+                },
+            ],
+        };
+    }
+    async handleClick(sessionId, selector, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.click(session, selector, windowId);
+    }
+    async handleType(sessionId, selector, text, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.type(session, selector, text, windowId);
+    }
+    async handleScreenshot(sessionId, path, windowId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.screenshot(session, path, windowId);
+    }
+    async handleEvaluate(sessionId, script, windowId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.evaluate(session, script, windowId);
+    }
+    async handleWaitForSelector(sessionId, selector, timeout, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.waitForSelector(session, selector, timeout, windowId);
+    }
+    async handleIpcInvoke(sessionId, channel, args) {
+        const session = await this.getSession(sessionId);
+        const result = await this.driver.invokeIPC(session, channel, ...args);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `IPC result: ${JSON.stringify(result)}`,
+                },
+            ],
+        };
+    }
+    async handleGetWindows(sessionId) {
+        const session = await this.getSession(sessionId);
+        const windows = await this.driver.getWindows(session);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Available windows: ${windows.join(", ")}`,
+                },
+            ],
+        };
+    }
+    async handleWriteFile(sessionId, filePath, content) {
+        const session = await this.getSession(sessionId);
+        await this.driver.writeFile(session, filePath, content);
+    }
+    async handleReadFile(sessionId, filePath) {
+        const session = await this.getSession(sessionId);
+        const content = await this.driver.readFile(session, filePath);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: content,
+                },
+            ],
+        };
+    }
+    async handleKeyboardPress(sessionId, key, modifiers, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.keyboardPress(session, key, modifiers, windowId);
+    }
+    async handleClickByText(sessionId, text, exact, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.clickByText(session, text, exact || false, windowId);
+    }
+    async handleAddLocatorHandler(sessionId, selector, action, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.addLocatorHandler(session, selector, action, windowId);
+    }
+    async handleClickByRole(sessionId, role, name, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.clickByRole(session, role, name, windowId);
+    }
+    async handleClickNth(sessionId, selector, index, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.clickNth(session, selector, index, windowId);
+    }
+    async handleKeyboardType(sessionId, text, delay, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.keyboardType(session, text, delay, windowId);
+    }
+    async handleWaitForLoadState(sessionId, state, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.waitForLoadState(session, state, windowId);
+    }
+    async handleSnapshot(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.snapshot(session, windowId);
+    }
+    async handleHover(sessionId, selector, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.hover(session, selector, windowId);
+    }
+    async handleDrag(sessionId, sourceSelector, targetSelector, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.drag(session, sourceSelector, targetSelector, windowId);
+    }
+    async handleKey(sessionId, key, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.key(session, key, windowId);
+    }
+    async handleSelect(sessionId, selector, value, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.select(session, selector, value, windowId);
+    }
+    async handleUpload(sessionId, selector, filePath, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.upload(session, selector, filePath, windowId);
+    }
+    async handleBack(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.back(session, windowId);
+    }
+    async handleForward(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.forward(session, windowId);
+    }
+    async handleRefresh(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.refresh(session, windowId);
+    }
+    async handleContent(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.content(session, windowId);
+    }
+    async handleTextContent(sessionId, windowId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.textContent(session, windowId);
+    }
+    async handleClose(sessionId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.close(session);
+        this.sessions.delete(sessionId);
+    }
+    async run() {
+        const transport = new stdio_js_1.StdioServerTransport();
+        await this.server.connect(transport);
+    }
+}
+exports.ElectronMCPServer = ElectronMCPServer;
+//# sourceMappingURL=electron-server.js.map

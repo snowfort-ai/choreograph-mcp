@@ -1,0 +1,41 @@
+export declare class ElectronMCPServer {
+    private name;
+    private version;
+    private server;
+    private driver;
+    private sessions;
+    constructor(name: string, version?: string);
+    private setupHandlers;
+    private getSession;
+    private handleAppLaunch;
+    private handleClick;
+    private handleType;
+    private handleScreenshot;
+    private handleEvaluate;
+    private handleWaitForSelector;
+    private handleIpcInvoke;
+    private handleGetWindows;
+    private handleWriteFile;
+    private handleReadFile;
+    private handleKeyboardPress;
+    private handleClickByText;
+    private handleAddLocatorHandler;
+    private handleClickByRole;
+    private handleClickNth;
+    private handleKeyboardType;
+    private handleWaitForLoadState;
+    private handleSnapshot;
+    private handleHover;
+    private handleDrag;
+    private handleKey;
+    private handleSelect;
+    private handleUpload;
+    private handleBack;
+    private handleForward;
+    private handleRefresh;
+    private handleContent;
+    private handleTextContent;
+    private handleClose;
+    run(): Promise<void>;
+}
+//# sourceMappingURL=electron-server.d.ts.map

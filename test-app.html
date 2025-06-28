@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Electron App</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #output { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>Test Electron App for Snowfort Choreograph MCP</h1>
+    <p>This is a simple test application for demonstrating Snowfort Choreograph MCP automation.</p>
+    
+    <button id="test-button">Click Me!</button>
+    <button id="change-text">Change Text</button>
+    
+    <input type="text" id="test-input" placeholder="Type something here..." />
+    
+    <div id="output">
+        <p>Output will appear here...</p>
+    </div>
+
+    <script>
+        document.getElementById('test-button').addEventListener('click', () => {
+            document.getElementById('output').innerHTML = '<p>Button was clicked!</p>';
+        });
+
+        document.getElementById('change-text').addEventListener('click', () => {
+            document.getElementById('output').innerHTML = '<p>Text changed: ' + new Date().toLocaleTimeString() + '</p>';
+        });
+
+        document.getElementById('test-input').addEventListener('input', (e) => {
+            document.getElementById('output').innerHTML = '<p>You typed: ' + e.target.value + '</p>';
+        });
+    </script>
+</body>
+</html>

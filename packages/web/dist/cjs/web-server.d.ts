@@ -1,0 +1,32 @@
+export declare class WebMCPServer {
+    private name;
+    private version;
+    private server;
+    private driver;
+    private sessions;
+    constructor(name: string, version?: string);
+    private setupHandlers;
+    private getSession;
+    private handleBrowserLaunch;
+    private handleBrowserNavigate;
+    private handleClick;
+    private handleType;
+    private handleScreenshot;
+    private handleEvaluate;
+    private handleWaitForSelector;
+    private handleSnapshot;
+    private handleHover;
+    private handleDrag;
+    private handleKey;
+    private handleSelect;
+    private handleUpload;
+    private handleBack;
+    private handleForward;
+    private handleRefresh;
+    private handlePdf;
+    private handleContent;
+    private handleTextContent;
+    private handleClose;
+    run(): Promise<void>;
+}
+//# sourceMappingURL=web-server.d.ts.map
