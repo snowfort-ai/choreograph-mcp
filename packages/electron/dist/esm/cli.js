@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { ElectronMCPServer } from "./electron-server.js";
-// Handle unhandled rejections
+// Handle unhandled rejections gracefully to avoid closing MCP transport
 process.on("unhandledRejection", (reason, promise) => {
     console.error("Unhandled Rejection at:", promise, "reason:", reason);
-    process.exit(1);
+    // Don't exit - let MCP server handle errors gracefully
 });
 process.on("uncaughtException", (error) => {
     console.error("Uncaught Exception:", error);
-    process.exit(1);
+    // Only exit on truly fatal errors, not on launch failures
+    if (error.message && error.message.includes('MCP Server')) {
+        process.exit(1);
+    }
 });
 const program = new Command();
 program
     .name("sfcg-electron")
     .description("Snowfort Choreograph Electron MCP - Programmatic control of Electron apps for testing and validation")
-    .version("0.2.2")
+    .version("0.5.4")
     .option("--name <name>", "Server name for MCP handshake", "sfcg-electron")
     .action(async (options) => {
     try {
-        const server = new ElectronMCPServer(options.name, "0.2.2");
+        const server = new ElectronMCPServer(options.name, "0.5.4");
         await server.run();
     }
     catch (error) {
-        console.error("MCP Server Error:", error);
+        console.error("Fatal MCP Server Error:", error);
         process.exit(1);
     }
 });

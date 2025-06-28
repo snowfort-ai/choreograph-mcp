@@ -28,13 +28,13 @@ export class ElectronMCPServer {
                 tools: [
                     {
                         name: "app_launch",
-                        description: "Launch an Electron application",
+                        description: "Launch new Electron app instance (cannot connect to running apps)",
                         inputSchema: {
                             type: "object",
                             properties: {
                                 app: {
                                     type: "string",
-                                    description: "Path to the Electron application executable",
+                                    description: "Path to app executable or project directory (launches new instance)",
                                 },
                                 args: {
                                     type: "array",
@@ -53,13 +53,38 @@ export class ElectronMCPServer {
                                     type: "number",
                                     description: "Launch timeout in milliseconds",
                                 },
+                                mode: {
+                                    type: "string",
+                                    enum: ["auto", "development", "packaged"],
+                                    description: "Launch mode: auto-detect, development, or packaged (default: auto)",
+                                },
+                                projectPath: {
+                                    type: "string",
+                                    description: "Project directory for development mode",
+                                },
+                                startScript: {
+                                    type: "string",
+                                    description: "npm script name for development mode (default: start)",
+                                },
+                                electronPath: {
+                                    type: "string",
+                                    description: "Custom path to electron executable",
+                                },
+                                compressScreenshots: {
+                                    type: "boolean",
+                                    description: "Compress screenshots to JPEG (default: true)",
+                                },
+                                screenshotQuality: {
+                                    type: "number",
+                                    description: "JPEG quality 1-100 (default: 50)",
+                                },
                             },
                             required: ["app"],
                         },
                     },
                     {
                         name: "click",
-                        description: "Click on an element identified by a CSS selector",
+                        description: "Click element and get updated window snapshot with element references",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -81,7 +106,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "type",
-                        description: "Type text into an element identified by a CSS selector",
+                        description: "Type text and get updated window snapshot with element references",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -107,7 +132,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "screenshot",
-                        description: "Take a screenshot of the current window",
+                        description: "Take a compressed screenshot of the current window",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -199,7 +224,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "get_windows",
-                        description: "Get list of available windows in the Electron application",
+                        description: "List windows in current session (requires active session from app_launch)",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -253,7 +278,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "close",
-                        description: "Close an Electron application session",
+                        description: "Close session and terminate launched Electron app",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -448,7 +473,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "snapshot",
-                        description: "Get accessibility tree snapshot of the current window",
+                        description: "Get accessibility tree snapshot with element references for AI targeting",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -688,10 +713,18 @@ export class ElectronMCPServer {
                         return await this.handleAppLaunch(toolArgs);
                     case "click":
                         await this.handleClick(toolArgs.sessionId, toolArgs.selector, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Element clicked successfully" }] };
+                        const clickSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Element clicked successfully" },
+                                { type: "text", text: `Window Snapshot:\n${clickSnapshot}` }
+                            ] };
                     case "type":
                         await this.handleType(toolArgs.sessionId, toolArgs.selector, toolArgs.text, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Text typed successfully" }] };
+                        const typeSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Text typed successfully" },
+                                { type: "text", text: `Window Snapshot:\n${typeSnapshot}` }
+                            ] };
                     case "screenshot":
                         const screenshotPath = await this.handleScreenshot(toolArgs.sessionId, toolArgs.path, toolArgs.windowId);
                         return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
@@ -715,22 +748,42 @@ export class ElectronMCPServer {
                         return { content: [{ type: "text", text: "Session closed successfully" }] };
                     case "keyboard_press":
                         await this.handleKeyboardPress(toolArgs.sessionId, toolArgs.key, toolArgs.modifiers, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Key pressed successfully" }] };
+                        const kbPressSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Key pressed successfully" },
+                                { type: "text", text: `Window Snapshot:\n${kbPressSnapshot}` }
+                            ] };
                     case "click_by_text":
                         await this.handleClickByText(toolArgs.sessionId, toolArgs.text, toolArgs.exact, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Element clicked by text successfully" }] };
+                        const clickTextSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Element clicked by text successfully" },
+                                { type: "text", text: `Window Snapshot:\n${clickTextSnapshot}` }
+                            ] };
                     case "add_locator_handler":
                         await this.handleAddLocatorHandler(toolArgs.sessionId, toolArgs.selector, toolArgs.action, toolArgs.windowId);
                         return { content: [{ type: "text", text: "Locator handler added successfully" }] };
                     case "click_by_role":
                         await this.handleClickByRole(toolArgs.sessionId, toolArgs.role, toolArgs.name, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Element clicked by role successfully" }] };
+                        const clickRoleSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Element clicked by role successfully" },
+                                { type: "text", text: `Window Snapshot:\n${clickRoleSnapshot}` }
+                            ] };
                     case "click_nth":
                         await this.handleClickNth(toolArgs.sessionId, toolArgs.selector, toolArgs.index, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Nth element clicked successfully" }] };
+                        const clickNthSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Nth element clicked successfully" },
+                                { type: "text", text: `Window Snapshot:\n${clickNthSnapshot}` }
+                            ] };
                     case "keyboard_type":
                         await this.handleKeyboardType(toolArgs.sessionId, toolArgs.text, toolArgs.delay, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Text typed successfully" }] };
+                        const kbTypeSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Text typed successfully" },
+                                { type: "text", text: `Window Snapshot:\n${kbTypeSnapshot}` }
+                            ] };
                     case "wait_for_load_state":
                         await this.handleWaitForLoadState(toolArgs.sessionId, toolArgs.state, toolArgs.windowId);
                         return { content: [{ type: "text", text: "Page load state reached" }] };
@@ -739,19 +792,39 @@ export class ElectronMCPServer {
                         return { content: [{ type: "text", text: snapshotResult }] };
                     case "hover":
                         await this.handleHover(toolArgs.sessionId, toolArgs.selector, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Element hovered successfully" }] };
+                        const hoverSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Element hovered successfully" },
+                                { type: "text", text: `Window Snapshot:\n${hoverSnapshot}` }
+                            ] };
                     case "drag":
                         await this.handleDrag(toolArgs.sessionId, toolArgs.sourceSelector, toolArgs.targetSelector, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Element dragged successfully" }] };
+                        const dragSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Element dragged successfully" },
+                                { type: "text", text: `Window Snapshot:\n${dragSnapshot}` }
+                            ] };
                     case "key":
                         await this.handleKey(toolArgs.sessionId, toolArgs.key, toolArgs.windowId);
-                        return { content: [{ type: "text", text: `Key '${toolArgs.key}' pressed successfully` }] };
+                        const keySnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: `Key '${toolArgs.key}' pressed successfully` },
+                                { type: "text", text: `Window Snapshot:\n${keySnapshot}` }
+                            ] };
                     case "select":
                         await this.handleSelect(toolArgs.sessionId, toolArgs.selector, toolArgs.value, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Option selected successfully" }] };
+                        const selectSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Option selected successfully" },
+                                { type: "text", text: `Window Snapshot:\n${selectSnapshot}` }
+                            ] };
                     case "upload":
                         await this.handleUpload(toolArgs.sessionId, toolArgs.selector, toolArgs.filePath, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "File uploaded successfully" }] };
+                        const uploadSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "File uploaded successfully" },
+                                { type: "text", text: `Window Snapshot:\n${uploadSnapshot}` }
+                            ] };
                     case "back":
                         await this.handleBack(toolArgs.sessionId, toolArgs.windowId);
                         return { content: [{ type: "text", text: "Navigated back successfully" }] };
@@ -760,7 +833,11 @@ export class ElectronMCPServer {
                         return { content: [{ type: "text", text: "Navigated forward successfully" }] };
                     case "refresh":
                         await this.handleRefresh(toolArgs.sessionId, toolArgs.windowId);
-                        return { content: [{ type: "text", text: "Window refreshed successfully" }] };
+                        const refreshSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                        return { content: [
+                                { type: "text", text: "Window refreshed successfully" },
+                                { type: "text", text: `Window Snapshot:\n${refreshSnapshot}` }
+                            ] };
                     case "content":
                         const htmlContent = await this.handleContent(toolArgs.sessionId, toolArgs.windowId);
                         return { content: [{ type: "text", text: htmlContent }] };
@@ -787,23 +864,59 @@ export class ElectronMCPServer {
         return session;
     }
     async handleAppLaunch(args) {
-        const opts = {
-            app: args.app,
-            args: args.args,
-            env: args.env,
-            cwd: args.cwd,
-            timeout: args.timeout,
-        };
-        const session = await this.driver.launch(opts);
-        this.sessions.set(session.id, session);
-        return {
-            content: [
-                {
-                    type: "text",
-                    text: `Electron app launched successfully. Session ID: ${session.id}`,
-                },
-            ],
-        };
+        let debugInfo = [];
+        try {
+            const opts = {
+                app: args.app,
+                args: args.args,
+                env: args.env,
+                cwd: args.cwd,
+                timeout: args.timeout,
+                mode: args.mode,
+                projectPath: args.projectPath,
+                startScript: args.startScript,
+                electronPath: args.electronPath,
+                compressScreenshots: args.compressScreenshots,
+                screenshotQuality: args.screenshotQuality,
+            };
+            debugInfo.push(`[DEBUG] Launch attempt for app: ${opts.app}`);
+            debugInfo.push(`[DEBUG] Mode: ${opts.mode || 'auto'}`);
+            debugInfo.push(`[DEBUG] Project path: ${opts.projectPath || 'not specified'}`);
+            debugInfo.push(`[DEBUG] CWD: ${opts.cwd || process.cwd()}`);
+            const session = await this.driver.launch(opts);
+            this.sessions.set(session.id, session);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Electron app launched successfully. Session ID: ${session.id}`,
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            // Capture additional debug info for the error response
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Include debug information in the error response so it appears in MCP logs
+            const fullErrorMessage = [
+                `Failed to launch Electron app: ${errorMessage}`,
+                '',
+                '=== DEBUG INFO ===',
+                ...debugInfo,
+                `[DEBUG] Final error: ${errorMessage}`,
+                `[DEBUG] Error type: ${error?.constructor?.name || 'Unknown'}`,
+                '=================='
+            ].join('\n');
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: fullErrorMessage,
+                    },
+                ],
+                isError: true,
+            };
+        }
     }
     async handleClick(sessionId, selector, windowId) {
         const session = await this.getSession(sessionId);
@@ -944,14 +1057,10 @@ export class ElectronMCPServer {
     }
     async run() {
         try {
-            console.error("[DEBUG] Starting MCP server...");
             const transport = new StdioServerTransport();
-            console.error("[DEBUG] Transport created, connecting...");
             await this.server.connect(transport);
-            console.error("[DEBUG] MCP server connected and running");
         }
         catch (error) {
-            console.error("[DEBUG] Error in server.run():", error);
             throw error;
         }
     }
