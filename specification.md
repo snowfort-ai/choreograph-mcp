@@ -1,8 +1,8 @@
-# Project Specification – Snowfort Choreograph MCP
+# Project Specification – Snowfort Circuit MCP
 
 ## 1 Purpose
 
-Create a dual‑engine Model Context Protocol (MCP) server suite, **Snowfort Choreograph MCP**, that enables AI coding agents (e.g., Claude Code) to drive both:
+Create a dual‑engine Model Context Protocol (MCP) server suite, **Snowfort Circuit MCP**, that enables AI coding agents (e.g., Claude Code) to drive both:
 
 1. **Web (PWA) automation** via Playwright's Chromium/Firefox/WebKit back‑ends.
 2. **Desktop (Electron) automation** via Playwright's `_electron` API, exposing IPC, Node/FS, and native Electron features.
@@ -16,7 +16,7 @@ Goals:
 ## 2 Starting Point
 
 * Implementation approach: Independent development with comprehensive automation capabilities.
-* Repository: **`github.com/snowfort-ai/choreograph-mcp`**.
+* Repository: **`github.com/snowfort-ai/circuit-mcp`**.
 
 ### Key architecture components
 
@@ -41,9 +41,9 @@ No use of "Playwright" in new package or binary names.
 
 ```
 packages
-  ├─ core        (@sfcg/core)     ← shared MCP infra & Driver interface
-  ├─ web         (@sfcg/web)      ← web CLI wrapper (chromium default)
-  └─ electron    (@sfcg/electron) ← electron CLI wrapper
+  ├─ core        (@snowfort/circuit-core)     ← shared MCP infra & Driver interface
+  ├─ web         (@snowfort/circuit-web)      ← web CLI wrapper (chromium default)
+  └─ electron    (@snowfort/circuit-electron) ← electron CLI wrapper
 ```
 
 ### Driver Interface (core)
@@ -61,22 +61,22 @@ export interface Driver {
 
 ## 5 Package Details
 
-### @sfcg/core
+### @snowfort/circuit-core
 
 * ESM + CJS build via TS 5.
 * Exports `runServer(opts)` which binds an MCP transport to a `Driver`.
 
-### @sfcg/web
+### @snowfort/circuit-web
 
-* CLI `sfcg-web` (bin field).
+* CLI `circuit-web` (bin field).
 * Flags: `--port`, `--browser`, `--headed`, `--name`.
-* Handshake `name`: `sfcg-web`.
+* Handshake `name`: `circuit-web`.
 
-### @sfcg/electron
+### @snowfort/circuit-electron
 
-* CLI `sfcg-electron`.
+* CLI `circuit-electron`.
 * Flags: `--port`, `--app`, `--headed`, `--name`.
-* Handshake `name`: `sfcg-electron`.
+* Handshake `name`: `circuit-electron`.
 * New root verb: `app_launch` (replaces `browser_navigate`).
 * Extra verbs: `ipc_invoke`, `dialog_expect`, `fs_writeFile`, etc.
 
@@ -93,17 +93,17 @@ export interface Driver {
 
 ```bash
 # Web (Chromium)
-sfcg-web --port 5110 --headed
+circuit-web --port 5110 --headed
 
 # Electron
 electron‑forge make  # builds ./dist/MyApp
-sfcg-electron --app ./dist/MyApp --port 5111
+circuit-electron --app ./dist/MyApp --port 5111
 ```
 
 ## 8 Development Workflow
 
 1. `pnpm install` – workspace bootstrap.
-2. Hot‑run: `pnpm --filter @sfcg/electron exec tsx src/cli.ts --app ./dev/App`.
+2. Hot‑run: `pnpm --filter @snowfort/circuit-electron exec tsx src/cli.ts --app ./dev/App`.
 3. Build: `pnpm -r build` → outputs `dist/` in each pkg.
 4. Local link: `npm link` per CLI for external project tests.
 5. Trace debugging: `--trace-on-failure` flag passes through to Playwright.
@@ -122,9 +122,9 @@ sfcg-electron --app ./dist/MyApp --port 5111
 
 | ID | Description              | Acceptance Criteria                                                 |
 | -- | ------------------------ | ------------------------------------------------------------------- |
-| D1 | @sfcg/core package       | Passes unit tests, exposes Driver interface                        |
-| D2 | @sfcg/web CLI            | Runs comprehensive web automation flows, handshake name correct    |
-| D3 | @sfcg/electron CLI       | Launches Electron apps, IPC verb works                             |
+| D1 | @snowfort/circuit-core package       | Passes unit tests, exposes Driver interface                        |
+| D2 | @snowfort/circuit-web CLI            | Runs comprehensive web automation flows, handshake name correct    |
+| D3 | @snowfort/circuit-electron CLI       | Launches Electron apps, IPC verb works                             |
 | D4 | Docs site (`docs/`)      | Quick‑start, verb spec, FAQ                                        |
 | D5 | CI pipeline              | Green on all OSes, publishes tarballs                              |
 | D6 | License compliance       | LICENSE + NOTICE headers preserved, THIRD\_PARTY\_NOTICES generated |

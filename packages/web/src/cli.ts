@@ -18,16 +18,16 @@ process.on("uncaughtException", (error) => {
 const program = new Command();
 
 program
-  .name("sfcg-web")
-  .description("Snowfort Choreograph Web MCP - Programmatic browser control for testing and validation of web applications")
-  .version("0.2.3")
+  .name("circuit-web")
+  .description("Snowfort Circuit Web MCP - Computer use for webapps and electron apps")
+  .version("0.0.1")
   .option("--port <port>", "Port to listen on (stdio mode only)")
   .option("--browser <browser>", "Default browser engine", "chromium")
   .option("--headed", "Run in headed mode by default")
-  .option("--name <name>", "Server name for MCP handshake", "sfcg-web")
+  .option("--name <name>", "Server name for MCP handshake", "circuit-web")
   .action(async (options) => {
     try {
-      const server = new WebMCPServer(options.name, "0.2.3");
+      const server = new WebMCPServer(options.name, "0.0.1");
       await server.run();
     } catch (error) {
       console.error("MCP Server Error:", error);

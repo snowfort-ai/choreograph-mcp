@@ -21,13 +21,13 @@ process.on("uncaughtException", (error) => {
 const program = new Command();
 
 program
-  .name("sfcg-electron")
-  .description("Snowfort Choreograph Electron MCP - Programmatic control of Electron apps for testing and validation")
-  .version("0.5.4")
-  .option("--name <name>", "Server name for MCP handshake", "sfcg-electron")
+  .name("circuit-electron")
+  .description("Snowfort Circuit Electron MCP - Computer use for webapps and electron apps")
+  .version("0.0.1")
+  .option("--name <name>", "Server name for MCP handshake", "circuit-electron")
   .action(async (options) => {
     try {
-      const server = new ElectronMCPServer(options.name, "0.5.4");
+      const server = new ElectronMCPServer(options.name, "0.0.1");
       await server.run();
     } catch (error) {
       console.error("Fatal MCP Server Error:", error);

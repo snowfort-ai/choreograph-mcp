@@ -1,9 +1,9 @@
 // Import from playwright-core (will be overridden with project version)
 import { _electron as electronDefault, ElectronApplication, Page } from "playwright-core";
-import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
+import { Driver, LaunchOpts, Session } from "@snowfort/circuit-core";
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
-import { exec } from "child_process";
+import { exec, spawn, ChildProcess } from "child_process";
 import { promisify } from "util";
 import * as path from "path";
 import * as os from "os";
@@ -22,6 +22,8 @@ export interface ElectronLaunchOpts extends LaunchOpts {
   electronPath?: string;
   compressScreenshots?: boolean;
   screenshotQuality?: number;
+  disableDevtools?: boolean;
+  killPortConflicts?: boolean;
 }
 
 export interface ElectronSession extends Session {
@@ -29,9 +31,179 @@ export interface ElectronSession extends Session {
   mainWindow?: Page;
   windows: Map<string, Page>;
   options?: ElectronLaunchOpts;
+  devServerProcess?: ChildProcess;
 }
 
 export class ElectronDriver implements Driver {
+  private devServerProcesses: Map<string, ChildProcess> = new Map();
+
+  private async killProcessesOnPorts(ports: number[]): Promise<void> {
+    const promises = ports.map(async (port) => {
+      try {
+        // Use lsof to find processes using the port
+        const { stdout } = await execAsync(`lsof -ti:${port}`);
+        const pids = stdout.trim().split('\n').filter(pid => pid);
+        
+        if (pids.length > 0) {
+          // Kill each process
+          await Promise.all(pids.map(pid => 
+            execAsync(`kill -9 ${pid}`).catch(() => {
+              // Ignore errors - process might already be dead
+            })
+          ));
+          return `Killed ${pids.length} process(es) on port ${port}`;
+        }
+        return `No processes found on port ${port}`;
+      } catch (error) {
+        // Port not in use or lsof failed
+        return `Port ${port} was free or couldn't check`;
+      }
+    });
+
+    const results = await Promise.all(promises);
+    // Results are logged by the caller for debugging
+  }
+
+  private async getWindowType(window: Page): Promise<'main' | 'devtools' | 'other'> {
+    try {
+      const title = await window.title();
+      const url = await window.url();
+      
+      if (title && (
+        title.includes('DevTools') || 
+        title.includes('Developer Tools') ||
+        title.startsWith('chrome-extension://') ||
+        url.startsWith('devtools://')
+      )) {
+        return 'devtools';
+      }
+      
+      if (title === 'about:blank' || !title) {
+        return 'other';
+      }
+      
+      return 'main';
+    } catch {
+      return 'other';
+    }
+  }
+
+  private async getMainWindow(electronApp: ElectronApplication, timeout: number = 10000): Promise<Page | undefined> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeout) {
+      const windows = await electronApp.windows();
+      
+      for (const window of windows) {
+        const windowType = await this.getWindowType(window);
+        if (windowType === 'main') {
+          return window;
+        }
+      }
+      
+      // Wait a bit before trying again
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Fallback to firstWindow if no main window found
+    return await electronApp.firstWindow();
+  }
+
+  private async startDevServer(projectPath: string, startScript: string): Promise<ChildProcess> {
+    return new Promise((resolve, reject) => {
+      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const devServerProcess = spawn(npmCmd, ['run', startScript], {
+        cwd: projectPath,
+        stdio: 'pipe',
+        shell: true,
+      });
+
+      let output = '';
+      let errorOutput = '';
+      let resolved = false;
+      
+      // Set a timeout for server startup with progress updates
+      let progressCount = 0;
+      const progressInterval = setInterval(() => {
+        if (!resolved) {
+          progressCount++;
+          // Log progress every 5 seconds
+          if (progressCount % 5 === 0) {
+            console.error(`[Dev Server] Waiting for startup... ${progressCount}s elapsed`);
+            if (output.trim()) {
+              console.error(`[Dev Server] Last output: ${output.split('\n').slice(-3).join('\n')}`);
+            }
+          }
+        }
+      }, 1000);
+      
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          clearInterval(progressInterval);
+          devServerProcess.kill();
+          reject(new Error(`Dev server startup timeout after 30 seconds. Last output: ${output}`));
+        }
+      }, 30000);
+
+      devServerProcess.stdout?.on('data', (data) => {
+        const chunk = data.toString();
+        output += chunk;
+        
+        // Look for common "ready" patterns
+        if (!resolved && (
+          chunk.includes('Compiled successfully') ||
+          chunk.includes('webpack compiled successfully') ||
+          chunk.includes('Webpack compiled successfully') ||
+          chunk.includes('Main window is ready') ||
+          chunk.includes('Electron Forge webpack output') ||
+          chunk.includes('App ready') ||
+          chunk.includes('Dev server is running') ||
+          // Electron Forge specific patterns
+          chunk.includes('✔ Compiling Renderer Process Code') ||
+          chunk.includes('✔ Launching Application') ||
+          chunk.includes('✔ Running preStart hook') ||
+          chunk.includes('STARTUP_URL=') ||
+          chunk.includes('Renderer webpack configuration') ||
+          // App-specific patterns
+          chunk.includes('Remote debugging enabled') ||
+          chunk.includes('Starting electron app') ||
+          chunk.includes('Electron app started')
+        )) {
+          resolved = true;
+          clearTimeout(timeout);
+          clearInterval(progressInterval);
+          // Give it a moment for the server to fully stabilize
+          setTimeout(() => resolve(devServerProcess), 2000); // Increased to 2s for Forge
+        }
+      });
+
+      devServerProcess.stderr?.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      devServerProcess.on('error', (error) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          clearInterval(progressInterval);
+          reject(new Error(`Failed to start dev server: ${error.message}`));
+        }
+      });
+
+      devServerProcess.on('exit', (code) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          clearInterval(progressInterval);
+          if (code !== 0) {
+            reject(new Error(`Dev server exited with code ${code}. Error output: ${errorOutput}`));
+          }
+        }
+      });
+    });
+  }
+
   private async getElectronInstance(projectPath?: string): Promise<{electron: any, debugInfo: string[]}> {
     const debugInfo: string[] = [];
     
@@ -206,6 +378,11 @@ export class ElectronDriver implements Driver {
       timeout: opts.timeout || 30000,
     };
     
+    // Add DevTools control if requested
+    if (opts.disableDevtools) {
+      launchConfig.args = [...(launchConfig.args || []), '--disable-dev-tools'];
+    }
+    
     // Only add env if user explicitly provided environment variables
     if (opts.env && Object.keys(opts.env).length > 0) {
       // Must include process.env to avoid breaking Electron
@@ -216,7 +393,7 @@ export class ElectronDriver implements Driver {
     const electronApp = await electron.launch(launchConfig);
 
     // Wait for main window
-    const mainWindow = await electronApp.firstWindow();
+    const mainWindow = await this.getMainWindow(electronApp);
     const windows = new Map<string, Page>();
     
     if (mainWindow) {
@@ -241,10 +418,15 @@ export class ElectronDriver implements Driver {
     // Build launch config without env by default
     const launchConfig: any = {
       executablePath: opts.app,
-      args: opts.args,
+      args: opts.args || [],
       cwd: opts.cwd,
       timeout: opts.timeout || 30000,
     };
+    
+    // Add DevTools control if requested
+    if (opts.disableDevtools) {
+      launchConfig.args = [...launchConfig.args, '--disable-dev-tools'];
+    }
     
     // Only add env if explicitly provided and non-empty
     if (opts.env && Object.keys(opts.env).length > 0) {
@@ -253,7 +435,7 @@ export class ElectronDriver implements Driver {
     
     const electronApp = await electron.launch(launchConfig);
 
-    const mainWindow = await electronApp.firstWindow();
+    const mainWindow = await this.getMainWindow(electronApp);
     const windows = new Map<string, Page>();
     
     if (mainWindow) {
@@ -309,9 +491,61 @@ export class ElectronDriver implements Driver {
 
   private async launchElectronForgeProject(opts: ElectronLaunchOpts, projectPath: string, packageJsonContent: any): Promise<ElectronSession> {
     let electronApp: ElectronApplication | undefined;
+    let devServerProcess: ChildProcess | undefined;
     let allDebugInfo: string[] = [];
     
     try {
+      // Start dev server if startScript is provided
+      if (opts.startScript) {
+        allDebugInfo.push(`[FORGE-DEBUG] Starting dev server with script: ${opts.startScript}`);
+        try {
+          devServerProcess = await this.startDevServer(projectPath, opts.startScript);
+          allDebugInfo.push(`[FORGE-DEBUG] ✓ Dev server started successfully`);
+          this.devServerProcesses.set(projectPath, devServerProcess);
+        } catch (devServerError) {
+          allDebugInfo.push(`[FORGE-DEBUG] ✗ Failed to start dev server: ${devServerError}`);
+          
+          // Check if it's a port conflict and auto-recovery is enabled
+          const errorMessage = devServerError instanceof Error ? devServerError.message : String(devServerError);
+          const isPortConflict = errorMessage.includes('EADDRINUSE') || errorMessage.includes('address already in use');
+          const shouldRetry = opts.killPortConflicts !== false; // Default to true unless explicitly disabled
+          
+          if (isPortConflict && shouldRetry) {
+            allDebugInfo.push(`[FORGE-DEBUG] Port conflict detected - attempting to kill existing processes and retry`);
+            
+            try {
+              // Try to extract the specific port from the error message
+              const portMatch = errorMessage.match(/:(\d+)/);
+              const conflictingPort = portMatch ? parseInt(portMatch[1]) : null;
+              
+              if (conflictingPort) {
+                allDebugInfo.push(`[FORGE-DEBUG] Detected port conflict on port ${conflictingPort}, killing processes on that port only`);
+                await this.killProcessesOnPorts([conflictingPort]);
+              } else {
+                // Fallback to common Electron Forge ports if we can't detect the specific port
+                allDebugInfo.push(`[FORGE-DEBUG] Could not detect specific port, trying common Electron Forge ports`);
+                await this.killProcessesOnPorts([9000, 9001, 9002]);
+              }
+              allDebugInfo.push(`[FORGE-DEBUG] Killed processes on conflicting ports, retrying dev server start`);
+              
+              // Wait a moment for ports to be freed
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Retry starting the dev server
+              devServerProcess = await this.startDevServer(projectPath, opts.startScript);
+              allDebugInfo.push(`[FORGE-DEBUG] ✓ Dev server started successfully after port cleanup`);
+              this.devServerProcesses.set(projectPath, devServerProcess);
+            } catch (retryError) {
+              allDebugInfo.push(`[FORGE-DEBUG] ✗ Retry failed: ${retryError}`);
+              throw new Error(`Failed to start dev server with '${opts.startScript}' even after port cleanup: ${errorMessage}`);
+            }
+          } else {
+            const hint = isPortConflict ? ' (set killPortConflicts: false to disable auto-recovery)' : '';
+            throw new Error(`Failed to start dev server with '${opts.startScript}': ${errorMessage}${hint}`);
+          }
+        }
+      }
+
       allDebugInfo.push(`[PLAYWRIGHT-DEBUG] Attempting to use project's Playwright...`);
       const { electron, debugInfo: playwrightDebugInfo } = await this.getElectronInstance(projectPath);
       allDebugInfo.push(...playwrightDebugInfo);
@@ -367,6 +601,11 @@ export class ElectronDriver implements Driver {
         cwd: projectPath,
         timeout: opts.timeout || 60000, // Longer timeout for Forge projects (webpack can be slow)
       };
+      
+      // Add DevTools control if requested
+      if (opts.disableDevtools) {
+        launchConfig.args = [...(launchConfig.args || []), '--disable-dev-tools'];
+      }
       
       // Only add env if user explicitly provided environment variables
       if (opts.env && Object.keys(opts.env).length > 0) {
@@ -445,7 +684,7 @@ export class ElectronDriver implements Driver {
       }
       
       // Wait for main window with extended patience
-      const mainWindow = await electronApp.firstWindow();
+      const mainWindow = await this.getMainWindow(electronApp);
       const windows = new Map<string, Page>();
       
       if (mainWindow) {
@@ -459,6 +698,7 @@ export class ElectronDriver implements Driver {
         mainWindow,
         windows,
         options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
+        devServerProcess,
       };
 
       return session;
@@ -474,6 +714,16 @@ export class ElectronDriver implements Driver {
           await electronApp.close();
         } catch (cleanupError) {
           allDebugInfo.push(`[FORGE-DEBUG] Cleanup error: ${cleanupError}`);
+        }
+      }
+      
+      // Kill dev server if it was started
+      if (devServerProcess) {
+        try {
+          devServerProcess.kill();
+          this.devServerProcesses.delete(projectPath);
+        } catch (killError) {
+          allDebugInfo.push(`[FORGE-DEBUG] Failed to kill dev server: ${killError}`);
         }
       }
       
@@ -689,6 +939,21 @@ export class ElectronDriver implements Driver {
   async close(session: Session): Promise<void> {
     const electronSession = session as ElectronSession;
     await electronSession.electronApp.close();
+    
+    // Clean up dev server if it exists
+    if (electronSession.devServerProcess) {
+      try {
+        electronSession.devServerProcess.kill();
+        // Remove from tracking map if we know the project path
+        if (electronSession.options?.projectPath || electronSession.options?.app) {
+          const projectPath = electronSession.options.projectPath || electronSession.options.app;
+          this.devServerProcesses.delete(projectPath);
+        }
+      } catch (error) {
+        // Log but don't throw - app is already closed
+        console.error('Failed to kill dev server process:', error);
+      }
+    }
   }
 
   private getWindow(session: ElectronSession, windowId?: string): Page {
@@ -781,10 +1046,29 @@ export class ElectronDriver implements Driver {
     );
   }
 
-  async getWindows(session: Session): Promise<string[]> {
+  async getWindows(session: Session): Promise<Array<{id: string, type: string, title: string}>> {
     const electronSession = session as ElectronSession;
     const windows = await electronSession.electronApp.windows();
-    return windows.map((_, index) => `window-${index}`);
+    const windowInfo = [];
+    
+    for (let index = 0; index < windows.length; index++) {
+      const window = windows[index];
+      const type = await this.getWindowType(window);
+      let title = '';
+      try {
+        title = await window.title();
+      } catch {
+        title = 'Unknown';
+      }
+      
+      windowInfo.push({
+        id: `window-${index}`,
+        type: type,
+        title: title
+      });
+    }
+    
+    return windowInfo;
   }
 
   async writeFile(session: Session, filePath: string, content: string): Promise<void> {

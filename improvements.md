@@ -1,4 +1,4 @@
-# Snowfort Choreograph MCP Improvements Analysis
+# Snowfort Circuit MCP Improvements Analysis
 
 ## 🔍 **Identified Issues & Confusion Patterns**
 

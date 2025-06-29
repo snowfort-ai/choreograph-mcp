@@ -1,7 +1,7 @@
 {
-  "name": "sfcg-mcp-core",
-  "version": "0.2.1",
-  "description": "Core MCP infrastructure and Driver interface for Snowfort Choreograph",
+  "name": "@snowfort/circuit-core",
+  "version": "0.0.1",
+  "description": "Core MCP infrastructure and Driver interface for Snowfort Circuit",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -35,7 +35,7 @@
   "author": "Snowfort LLC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/snowfort-ai/choreograph-mcp.git",
+    "url": "https://github.com/snowfort-ai/circuit-mcp.git",
     "directory": "packages/core"
   }
 }

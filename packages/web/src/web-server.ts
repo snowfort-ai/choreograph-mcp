@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Session, ToolResult } from "sfcg-mcp-core";
+import { Session, ToolResult } from "@snowfort/circuit-core";
 import { WebDriver, WebLaunchOpts, WebSession } from "./web-driver.js";
 
 export class WebMCPServer {
@@ -59,6 +59,14 @@ export class WebMCPServer {
                     height: { type: "number" },
                   },
                   description: "Viewport size",
+                },
+                compressScreenshots: {
+                  type: "boolean",
+                  description: "Compress screenshots to JPEG (default: true)",
+                },
+                screenshotQuality: {
+                  type: "number",
+                  description: "JPEG quality 1-100 (default: 50)",
                 },
               },
               required: [],
@@ -398,6 +406,157 @@ export class WebMCPServer {
               required: ["sessionId"],
             },
           },
+          {
+            name: "browser_resize",
+            description: "Resize browser window viewport",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+                width: {
+                  type: "number",
+                  description: "Viewport width in pixels",
+                },
+                height: {
+                  type: "number",
+                  description: "Viewport height in pixels",
+                },
+              },
+              required: ["sessionId", "width", "height"],
+            },
+          },
+          {
+            name: "browser_handle_dialog",
+            description: "Handle browser dialogs (alert, confirm, prompt)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+                action: {
+                  type: "string",
+                  enum: ["accept", "dismiss"],
+                  description: "Action to take on dialogs",
+                },
+                promptText: {
+                  type: "string",
+                  description: "Text to enter for prompt dialogs",
+                },
+              },
+              required: ["sessionId", "action"],
+            },
+          },
+          {
+            name: "browser_tab_new",
+            description: "Open a new tab",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+          {
+            name: "browser_tab_list",
+            description: "List all open tabs",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+          {
+            name: "browser_tab_select",
+            description: "Select a tab by ID",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+                tabId: {
+                  type: "string",
+                  description: "Tab ID to select",
+                },
+              },
+              required: ["sessionId", "tabId"],
+            },
+          },
+          {
+            name: "browser_tab_close",
+            description: "Close a tab by ID",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+                tabId: {
+                  type: "string",
+                  description: "Tab ID to close",
+                },
+              },
+              required: ["sessionId", "tabId"],
+            },
+          },
+          {
+            name: "browser_network_requests",
+            description: "Get all network requests from the session",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+          {
+            name: "browser_console_messages",
+            description: "Get all console messages from the session",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+          {
+            name: "browser_generate_playwright_test",
+            description: "Generate Playwright test code from recorded actions",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from browser_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
         ],
       };
     });
@@ -414,15 +573,27 @@ export class WebMCPServer {
 
           case "browser_navigate":
             await this.handleBrowserNavigate(toolArgs.sessionId as string, toolArgs.url as string);
-            return { content: [{ type: "text", text: "Navigation completed successfully" }] };
+            const navSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: "Navigation completed successfully" },
+              { type: "text", text: `Page Snapshot:\n${navSnapshot}` }
+            ] };
 
           case "click":
             await this.handleClick(toolArgs.sessionId as string, toolArgs.selector as string);
-            return { content: [{ type: "text", text: "Element clicked successfully" }] };
+            const clickSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: "Element clicked successfully" },
+              { type: "text", text: `Page Snapshot:\n${clickSnapshot}` }
+            ] };
 
           case "type":
             await this.handleType(toolArgs.sessionId as string, toolArgs.selector as string, toolArgs.text as string);
-            return { content: [{ type: "text", text: "Text typed successfully" }] };
+            const typeSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: "Text typed successfully" },
+              { type: "text", text: `Page Snapshot:\n${typeSnapshot}` }
+            ] };
 
           case "screenshot":
             const screenshotPath = await this.handleScreenshot(toolArgs.sessionId as string, toolArgs.path as string);
@@ -442,7 +613,11 @@ export class WebMCPServer {
 
           case "hover":
             await this.handleHover(toolArgs.sessionId as string, toolArgs.selector as string);
-            return { content: [{ type: "text", text: "Element hovered successfully" }] };
+            const hoverSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: "Element hovered successfully" },
+              { type: "text", text: `Page Snapshot:\n${hoverSnapshot}` }
+            ] };
 
           case "drag":
             await this.handleDrag(toolArgs.sessionId as string, toolArgs.sourceSelector as string, toolArgs.targetSelector as string);
@@ -450,7 +625,11 @@ export class WebMCPServer {
 
           case "key":
             await this.handleKey(toolArgs.sessionId as string, toolArgs.key as string);
-            return { content: [{ type: "text", text: `Key '${toolArgs.key}' pressed successfully` }] };
+            const keySnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: `Key '${toolArgs.key}' pressed successfully` },
+              { type: "text", text: `Page Snapshot:\n${keySnapshot}` }
+            ] };
 
           case "select":
             await this.handleSelect(toolArgs.sessionId as string, toolArgs.selector as string, toolArgs.value as string);
@@ -487,6 +666,50 @@ export class WebMCPServer {
           case "close":
             await this.handleClose(toolArgs.sessionId as string);
             return { content: [{ type: "text", text: "Session closed successfully" }] };
+
+          case "browser_resize":
+            await this.handleResize(toolArgs.sessionId as string, toolArgs.width as number, toolArgs.height as number);
+            const resizeSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: `Browser resized to ${toolArgs.width}x${toolArgs.height}` },
+              { type: "text", text: `Page Snapshot:\n${resizeSnapshot}` }
+            ] };
+
+          case "browser_handle_dialog":
+            await this.handleDialogSetup(toolArgs.sessionId as string, toolArgs.action as string, toolArgs.promptText as string);
+            return { content: [{ type: "text", text: `Dialog handler set to ${toolArgs.action}` }] };
+
+          case "browser_tab_new":
+            const newTabId = await this.handleNewTab(toolArgs.sessionId as string);
+            return { content: [{ type: "text", text: `New tab created with ID: ${newTabId}` }] };
+
+          case "browser_tab_list":
+            const tabs = await this.handleListTabs(toolArgs.sessionId as string);
+            return { content: [{ type: "text", text: JSON.stringify(tabs, null, 2) }] };
+
+          case "browser_tab_select":
+            await this.handleSelectTab(toolArgs.sessionId as string, toolArgs.tabId as string);
+            const tabSnapshot = await this.handleSnapshot(toolArgs.sessionId as string);
+            return { content: [
+              { type: "text", text: `Tab ${toolArgs.tabId} selected` },
+              { type: "text", text: `Page Snapshot:\n${tabSnapshot}` }
+            ] };
+
+          case "browser_tab_close":
+            await this.handleCloseTab(toolArgs.sessionId as string, toolArgs.tabId as string);
+            return { content: [{ type: "text", text: `Tab ${toolArgs.tabId} closed` }] };
+
+          case "browser_network_requests":
+            const requests = await this.handleNetworkRequests(toolArgs.sessionId as string);
+            return { content: [{ type: "text", text: JSON.stringify(requests, null, 2) }] };
+
+          case "browser_console_messages":
+            const messages = await this.handleConsoleMessages(toolArgs.sessionId as string);
+            return { content: [{ type: "text", text: JSON.stringify(messages, null, 2) }] };
+
+          case "browser_generate_playwright_test":
+            const testCode = await this.handleGenerateTest(toolArgs.sessionId as string);
+            return { content: [{ type: "text", text: testCode }] };
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -623,6 +846,51 @@ export class WebMCPServer {
     const session = await this.getSession(sessionId);
     await this.driver.close(session);
     this.sessions.delete(sessionId);
+  }
+
+  private async handleResize(sessionId: string, width: number, height: number): Promise<void> {
+    const session = await this.getSession(sessionId);
+    await this.driver.resize(session, width, height);
+  }
+
+  private async handleDialogSetup(sessionId: string, action: string, promptText?: string): Promise<void> {
+    const session = await this.getSession(sessionId);
+    await this.driver.handleDialog(session, action as 'accept' | 'dismiss', promptText);
+  }
+
+  private async handleNewTab(sessionId: string): Promise<string> {
+    const session = await this.getSession(sessionId);
+    return await this.driver.newTab(session);
+  }
+
+  private async handleListTabs(sessionId: string): Promise<Array<{id: string, title: string, url: string, active: boolean}>> {
+    const session = await this.getSession(sessionId);
+    return await this.driver.listTabs(session);
+  }
+
+  private async handleSelectTab(sessionId: string, tabId: string): Promise<void> {
+    const session = await this.getSession(sessionId);
+    await this.driver.selectTab(session, tabId);
+  }
+
+  private async handleCloseTab(sessionId: string, tabId: string): Promise<void> {
+    const session = await this.getSession(sessionId);
+    await this.driver.closeTab(session, tabId);
+  }
+
+  private async handleNetworkRequests(sessionId: string): Promise<Array<{url: string, method: string, status?: number, timestamp: number}>> {
+    const session = await this.getSession(sessionId);
+    return await this.driver.getNetworkRequests(session);
+  }
+
+  private async handleConsoleMessages(sessionId: string): Promise<Array<{type: string, text: string, timestamp: number}>> {
+    const session = await this.getSession(sessionId);
+    return await this.driver.getConsoleMessages(session);
+  }
+
+  private async handleGenerateTest(sessionId: string): Promise<string> {
+    const session = await this.getSession(sessionId);
+    return await this.driver.generatePlaywrightTest(session);
   }
 
   async run(): Promise<void> {

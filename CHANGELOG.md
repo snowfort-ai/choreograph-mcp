@@ -5,13 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.1] - 2025-06-29
+
+### Added
+- Rebranded to Snowfort Circuit MCP - Computer use for webapps and electron apps
+- Updated package names to @snowfort/circuit organization
+- Reset version to 0.0.1 for initial alpha release
+
 ## [0.1.0] - 2025-06-28
 
 ### Added
 - Initial release of Snowfort Choreograph MCP server
-- `@sfcg/core` package with shared MCP infrastructure and Driver interface
-- `@sfcg/web` package for web browser automation via Playwright
-- `@sfcg/electron` package for Electron desktop application automation
+- `sfcg-mcp-core` package with shared MCP infrastructure and Driver interface
+- `sfcg-mcp-web` package for web browser automation via Playwright
+- `sfcg-mcp-electron` package for Electron desktop application automation
 - Support for Chromium, Firefox, and WebKit browsers
 - Electron-specific features: IPC communication, window management, file system operations
 - Complete MCP protocol implementation with proper tool schemas

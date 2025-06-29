@@ -1,8 +1,8 @@
 {
-  "name": "snowfort-choreograph-mcp",
-  "version": "0.1.0",
+  "name": "@snowfort/circuit",
+  "version": "0.0.1",
   "private": true,
-  "description": "Snowfort Choreograph MCP - Automated web and desktop application control via Model Context Protocol",
+  "description": "Snowfort Circuit MCP - Computer use for webapps and electron apps",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -25,6 +25,6 @@
   "author": "Snowfort LLC",
   "repository": {
     "type": "git",
-    "url": "https://github.com/snowfort-ai/choreograph-mcp.git"
+    "url": "https://github.com/snowfort-ai/circuit-mcp.git"
   }
 }
