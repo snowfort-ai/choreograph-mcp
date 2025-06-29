@@ -28,7 +28,7 @@ export class ElectronMCPServer {
                 tools: [
                     {
                         name: "app_launch",
-                        description: "Launch new Electron app instance (cannot connect to running apps)",
+                        description: "Launch new Electron app instance. For Electron Forge projects, use startScript to auto-start webpack dev server",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -64,7 +64,7 @@ export class ElectronMCPServer {
                                 },
                                 startScript: {
                                     type: "string",
-                                    description: "npm script name for development mode (default: start)",
+                                    description: "npm script to run before launching (e.g., 'start' for Electron Forge). Enhanced detection for Forge patterns, 30s timeout with progress updates",
                                 },
                                 electronPath: {
                                     type: "string",
@@ -77,6 +77,14 @@ export class ElectronMCPServer {
                                 screenshotQuality: {
                                     type: "number",
                                     description: "JPEG quality 1-100 (default: 50)",
+                                },
+                                disableDevtools: {
+                                    type: "boolean",
+                                    description: "Prevent DevTools from opening automatically (default: false)",
+                                },
+                                killPortConflicts: {
+                                    type: "boolean",
+                                    description: "Automatically kill processes on conflicting ports and retry (default: true)",
                                 },
                             },
                             required: ["app"],
@@ -224,7 +232,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "get_windows",
-                        description: "List windows in current session (requires active session from app_launch)",
+                        description: "List windows with type identification (main/devtools/other) and titles",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -878,6 +886,8 @@ export class ElectronMCPServer {
                 electronPath: args.electronPath,
                 compressScreenshots: args.compressScreenshots,
                 screenshotQuality: args.screenshotQuality,
+                disableDevtools: args.disableDevtools,
+                killPortConflicts: args.killPortConflicts,
             };
             debugInfo.push(`[DEBUG] Launch attempt for app: ${opts.app}`);
             debugInfo.push(`[DEBUG] Mode: ${opts.mode || 'auto'}`);
@@ -953,11 +963,12 @@ export class ElectronMCPServer {
     async handleGetWindows(sessionId) {
         const session = await this.getSession(sessionId);
         const windows = await this.driver.getWindows(session);
+        const windowDescriptions = windows.map(w => `${w.id} (${w.type}${w.title ? `: "${w.title}"` : ''})`);
         return {
             content: [
                 {
                     type: "text",
-                    text: `Available windows: ${windows.join(", ")}`,
+                    text: `Available windows:\n${windowDescriptions.join("\n")}`,
                 },
             ],
         };

@@ -1,5 +1,6 @@
 import { ElectronApplication, Page } from "playwright-core";
-import { Driver, LaunchOpts, Session } from "sfcg-mcp-core";
+import { Driver, LaunchOpts, Session } from "@snowfort/circuit-core";
+import { ChildProcess } from "child_process";
 export interface ElectronLaunchOpts extends LaunchOpts {
     app: string;
     args?: string[];
@@ -11,14 +12,22 @@ export interface ElectronLaunchOpts extends LaunchOpts {
     electronPath?: string;
     compressScreenshots?: boolean;
     screenshotQuality?: number;
+    disableDevtools?: boolean;
+    killPortConflicts?: boolean;
 }
 export interface ElectronSession extends Session {
     electronApp: ElectronApplication;
     mainWindow?: Page;
     windows: Map<string, Page>;
     options?: ElectronLaunchOpts;
+    devServerProcess?: ChildProcess;
 }
 export declare class ElectronDriver implements Driver {
+    private devServerProcesses;
+    private killProcessesOnPorts;
+    private getWindowType;
+    private getMainWindow;
+    private startDevServer;
     private getElectronInstance;
     launch(opts: ElectronLaunchOpts): Promise<ElectronSession>;
     private autoLaunch;
@@ -50,7 +59,11 @@ export declare class ElectronDriver implements Driver {
     content(session: Session, windowId?: string): Promise<string>;
     textContent(session: Session, windowId?: string): Promise<string>;
     invokeIPC(session: Session, channel: string, ...args: any[]): Promise<any>;
-    getWindows(session: Session): Promise<string[]>;
+    getWindows(session: Session): Promise<Array<{
+        id: string;
+        type: string;
+        title: string;
+    }>>;
     writeFile(session: Session, filePath: string, content: string): Promise<void>;
     readFile(session: Session, filePath: string): Promise<string>;
     keyboardPress(session: Session, key: string, modifiers?: string[], windowId?: string): Promise<void>;
