@@ -1163,30 +1163,71 @@ export class ElectronMCPServer {
     try {
       const transport = new StdioServerTransport();
       
-      // Handle transport errors
+      // Enhanced transport error handling
       transport.onerror = (error: Error) => {
         console.error("[ELECTRON-MCP] Transport error:", error);
+        console.error("[ELECTRON-MCP] Transport error stack:", error.stack);
       };
       
       transport.onclose = () => {
-        console.error("[ELECTRON-MCP] Transport closed");
-        // Don't exit the process, let the CLI handle it
+        console.error("[ELECTRON-MCP] Transport closed - connection terminated");
+        console.error("[ELECTRON-MCP] Active sessions:", this.sessions.size);
+        // Log but don't exit - the client may reconnect
       };
       
+      // Add additional process event handlers
+      process.stdin.on('error', (error) => {
+        console.error("[ELECTRON-MCP] stdin error:", error);
+      });
+      
+      process.stdout.on('error', (error) => {
+        console.error("[ELECTRON-MCP] stdout error:", error);
+      });
+      
+      process.stderr.on('error', (error) => {
+        console.error("[ELECTRON-MCP] stderr error:", error);
+      });
+      
       console.error("[ELECTRON-MCP] Connecting transport...");
+      console.error("[ELECTRON-MCP] Process PID:", process.pid);
+      console.error("[ELECTRON-MCP] Node version:", process.version);
+      console.error("[ELECTRON-MCP] Platform:", process.platform);
+      
       await this.server.connect(transport);
       console.error("[ELECTRON-MCP] Transport connected successfully");
       
-      // Keep the connection alive
+      // Enhanced connection monitoring
+      const keepAlive = setInterval(() => {
+        console.error("[ELECTRON-MCP] Heartbeat - transport active, sessions:", this.sessions.size);
+      }, 30000); // Every 30 seconds
+      
+      // Keep process alive with multiple fallbacks
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      
       return new Promise((resolve, reject) => {
-        // This promise never resolves, keeping the server running
+        const cleanup = () => {
+          clearInterval(keepAlive);
+          console.error("[ELECTRON-MCP] Server shutting down gracefully");
+          resolve();
+        };
+        
         process.on("disconnect", () => {
           console.error("[ELECTRON-MCP] Process disconnected");
-          resolve();
+          cleanup();
         });
+        
+        process.on("SIGPIPE", () => {
+          console.error("[ELECTRON-MCP] SIGPIPE received - broken pipe");
+          cleanup();
+        });
+        
+        // Never let this promise resolve normally
+        // The process should stay alive until explicitly terminated
       });
     } catch (error) {
       console.error("[ELECTRON-MCP] Failed to connect transport:", error);
+      console.error("[ELECTRON-MCP] Error details:", error instanceof Error ? error.stack : error);
       throw error;
     }
   }

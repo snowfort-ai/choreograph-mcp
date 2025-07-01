@@ -1,6 +1,6 @@
 {
   "name": "@snowfort/circuit-core",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Core MCP infrastructure and Driver interface for Snowfort Circuit",
   "type": "module",
   "main": "./dist/cjs/index.js",

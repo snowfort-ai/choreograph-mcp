@@ -842,28 +842,60 @@ class WebMCPServer {
         try {
             console.error("[WEB-MCP] Starting Web MCP server...");
             const transport = new stdio_js_1.StdioServerTransport();
-            // Handle transport errors
+            // Enhanced transport error handling
             transport.onerror = (error) => {
                 console.error("[WEB-MCP] Transport error:", error);
+                console.error("[WEB-MCP] Transport error stack:", error.stack);
             };
             transport.onclose = () => {
-                console.error("[WEB-MCP] Transport closed");
-                // Don't exit the process, let the CLI handle it
+                console.error("[WEB-MCP] Transport closed - connection terminated");
+                console.error("[WEB-MCP] Active sessions:", this.sessions.size);
+                // Log but don't exit - the client may reconnect
             };
+            // Add additional process event handlers
+            process.stdin.on('error', (error) => {
+                console.error("[WEB-MCP] stdin error:", error);
+            });
+            process.stdout.on('error', (error) => {
+                console.error("[WEB-MCP] stdout error:", error);
+            });
+            process.stderr.on('error', (error) => {
+                console.error("[WEB-MCP] stderr error:", error);
+            });
             console.error("[WEB-MCP] Connecting transport...");
+            console.error("[WEB-MCP] Process PID:", process.pid);
+            console.error("[WEB-MCP] Node version:", process.version);
+            console.error("[WEB-MCP] Platform:", process.platform);
             await this.server.connect(transport);
             console.error("[WEB-MCP] Transport connected successfully");
-            // Keep the connection alive
+            // Enhanced connection monitoring
+            const keepAlive = setInterval(() => {
+                console.error("[WEB-MCP] Heartbeat - transport active, sessions:", this.sessions.size);
+            }, 30000); // Every 30 seconds
+            // Keep process alive with multiple fallbacks
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
             return new Promise((resolve, reject) => {
-                // This promise never resolves, keeping the server running
+                const cleanup = () => {
+                    clearInterval(keepAlive);
+                    console.error("[WEB-MCP] Server shutting down gracefully");
+                    resolve();
+                };
                 process.on("disconnect", () => {
                     console.error("[WEB-MCP] Process disconnected");
-                    resolve();
+                    cleanup();
                 });
+                process.on("SIGPIPE", () => {
+                    console.error("[WEB-MCP] SIGPIPE received - broken pipe");
+                    cleanup();
+                });
+                // Never let this promise resolve normally
+                // The process should stay alive until explicitly terminated
             });
         }
         catch (error) {
             console.error("[WEB-MCP] Failed to connect transport:", error);
+            console.error("[WEB-MCP] Error details:", error instanceof Error ? error.stack : error);
             throw error;
         }
     }
