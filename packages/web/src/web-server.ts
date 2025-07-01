@@ -893,15 +893,48 @@ export class WebMCPServer {
     return await this.driver.generatePlaywrightTest(session);
   }
 
+  async cleanup(): Promise<void> {
+    console.error("[WEB-MCP] Cleaning up server resources...");
+    // Close all active sessions
+    for (const [sessionId, session] of this.sessions) {
+      try {
+        await this.driver.close(session);
+      } catch (error) {
+        console.error(`[WEB-MCP] Error closing session ${sessionId}:`, error);
+      }
+    }
+    this.sessions.clear();
+  }
+
   async run(): Promise<void> {
     try {
-      console.error("[DEBUG] Starting Web MCP server...");
+      console.error("[WEB-MCP] Starting Web MCP server...");
       const transport = new StdioServerTransport();
-      console.error("[DEBUG] Transport created, connecting...");
+      
+      // Handle transport errors
+      transport.onerror = (error: Error) => {
+        console.error("[WEB-MCP] Transport error:", error);
+      };
+      
+      transport.onclose = () => {
+        console.error("[WEB-MCP] Transport closed");
+        // Don't exit the process, let the CLI handle it
+      };
+      
+      console.error("[WEB-MCP] Connecting transport...");
       await this.server.connect(transport);
-      console.error("[DEBUG] Web MCP server connected and running");
+      console.error("[WEB-MCP] Transport connected successfully");
+      
+      // Keep the connection alive
+      return new Promise((resolve, reject) => {
+        // This promise never resolves, keeping the server running
+        process.on("disconnect", () => {
+          console.error("[WEB-MCP] Process disconnected");
+          resolve();
+        });
+      });
     } catch (error) {
-      console.error("[DEBUG] Error in web server.run():", error);
+      console.error("[WEB-MCP] Failed to connect transport:", error);
       throw error;
     }
   }

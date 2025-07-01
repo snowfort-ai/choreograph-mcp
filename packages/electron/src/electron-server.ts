@@ -1146,11 +1146,47 @@ export class ElectronMCPServer {
     this.sessions.delete(sessionId);
   }
 
+  async cleanup(): Promise<void> {
+    console.error("[ELECTRON-MCP] Cleaning up server resources...");
+    // Close all active sessions
+    for (const [sessionId, session] of this.sessions) {
+      try {
+        await this.driver.close(session);
+      } catch (error) {
+        console.error(`[ELECTRON-MCP] Error closing session ${sessionId}:`, error);
+      }
+    }
+    this.sessions.clear();
+  }
+
   async run(): Promise<void> {
     try {
       const transport = new StdioServerTransport();
+      
+      // Handle transport errors
+      transport.onerror = (error: Error) => {
+        console.error("[ELECTRON-MCP] Transport error:", error);
+      };
+      
+      transport.onclose = () => {
+        console.error("[ELECTRON-MCP] Transport closed");
+        // Don't exit the process, let the CLI handle it
+      };
+      
+      console.error("[ELECTRON-MCP] Connecting transport...");
       await this.server.connect(transport);
+      console.error("[ELECTRON-MCP] Transport connected successfully");
+      
+      // Keep the connection alive
+      return new Promise((resolve, reject) => {
+        // This promise never resolves, keeping the server running
+        process.on("disconnect", () => {
+          console.error("[ELECTRON-MCP] Process disconnected");
+          resolve();
+        });
+      });
     } catch (error) {
+      console.error("[ELECTRON-MCP] Failed to connect transport:", error);
       throw error;
     }
   }

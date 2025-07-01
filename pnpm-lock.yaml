@@ -36,15 +36,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^0.5.0
         version: 0.5.0
+      '@snowfort/circuit-core':
+        specifier: workspace:*
+        version: link:../core
       commander:
         specifier: ^11.0.0
         version: 11.1.0
-      playwright:
+      playwright-core:
         specifier: ^1.40.0
         version: 1.53.1
-      sfcg-mcp-core:
-        specifier: ^0.1.0
-        version: 0.1.0
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -58,15 +58,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^0.5.0
         version: 0.5.0
+      '@snowfort/circuit-core':
+        specifier: workspace:*
+        version: link:../core
       commander:
         specifier: ^11.0.0
         version: 11.1.0
-      playwright:
+      playwright-core:
         specifier: ^1.40.0
         version: 1.53.1
-      sfcg-mcp-core:
-        specifier: ^0.1.0
-        version: 0.1.0
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -254,11 +254,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
-
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -283,11 +278,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.53.1:
-    resolution: {integrity: sha512-LJ13YLr/ocweuwxyGf1XNFWIU4M2zUSo149Qbp+A4cpwDjsxRPj7k6H25LBrEHiEwxvRbD8HdwvQmRMSvquhYw==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   raw-body@3.0.0:
     resolution: {integrity: sha512-RmkhL8CAyCRPXCE28MMH0z2PNWQBNk2Q09ZdxM9IOOXwxwZbN+qbWaatPkdkWIKL2ZVDImrN/pK5HTRz2PcS4g==}
     engines: {node: '>= 0.8'}
@@ -300,9 +290,6 @@ packages:
 
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
-
-  sfcg-mcp-core@0.1.0:
-    resolution: {integrity: sha512-8K245Gk3aYWCIDbHRjKrTaxkHxqho3AzzYu5mH3m0h0m2oPvA+1iVATp1/SXG6IvxbuCzkYNg6EMmJd/oA35Tw==}
 
   statuses@2.0.1:
     resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
@@ -455,9 +442,6 @@ snapshots:
       '@esbuild/win32-ia32': 0.25.5
       '@esbuild/win32-x64': 0.25.5
 
-  fsevents@2.3.2:
-    optional: true
-
   fsevents@2.3.3:
     optional: true
 
@@ -481,12 +465,6 @@ snapshots:
 
   playwright-core@1.53.1: {}
 
-  playwright@1.53.1:
-    dependencies:
-      playwright-core: 1.53.1
-    optionalDependencies:
-      fsevents: 2.3.2
-
   raw-body@3.0.0:
     dependencies:
       bytes: 3.1.2
@@ -499,10 +477,6 @@ snapshots:
   safer-buffer@2.1.2: {}
 
   setprototypeof@1.2.0: {}
-
-  sfcg-mcp-core@0.1.0:
-    dependencies:
-      '@modelcontextprotocol/sdk': 0.5.0
 
   statuses@2.0.1: {}
 

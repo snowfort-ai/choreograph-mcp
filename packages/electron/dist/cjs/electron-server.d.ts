@@ -36,6 +36,7 @@ export declare class ElectronMCPServer {
     private handleContent;
     private handleTextContent;
     private handleClose;
+    cleanup(): Promise<void>;
     run(): Promise<void>;
 }
 //# sourceMappingURL=electron-server.d.ts.map

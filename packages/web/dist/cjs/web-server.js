@@ -56,6 +56,14 @@ class WebMCPServer {
                                     },
                                     description: "Viewport size",
                                 },
+                                compressScreenshots: {
+                                    type: "boolean",
+                                    description: "Compress screenshots to JPEG (default: true)",
+                                },
+                                screenshotQuality: {
+                                    type: "number",
+                                    description: "JPEG quality 1-100 (default: 50)",
+                                },
                             },
                             required: [],
                         },
@@ -394,6 +402,157 @@ class WebMCPServer {
                             required: ["sessionId"],
                         },
                     },
+                    {
+                        name: "browser_resize",
+                        description: "Resize browser window viewport",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                                width: {
+                                    type: "number",
+                                    description: "Viewport width in pixels",
+                                },
+                                height: {
+                                    type: "number",
+                                    description: "Viewport height in pixels",
+                                },
+                            },
+                            required: ["sessionId", "width", "height"],
+                        },
+                    },
+                    {
+                        name: "browser_handle_dialog",
+                        description: "Handle browser dialogs (alert, confirm, prompt)",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                                action: {
+                                    type: "string",
+                                    enum: ["accept", "dismiss"],
+                                    description: "Action to take on dialogs",
+                                },
+                                promptText: {
+                                    type: "string",
+                                    description: "Text to enter for prompt dialogs",
+                                },
+                            },
+                            required: ["sessionId", "action"],
+                        },
+                    },
+                    {
+                        name: "browser_tab_new",
+                        description: "Open a new tab",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "browser_tab_list",
+                        description: "List all open tabs",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "browser_tab_select",
+                        description: "Select a tab by ID",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                                tabId: {
+                                    type: "string",
+                                    description: "Tab ID to select",
+                                },
+                            },
+                            required: ["sessionId", "tabId"],
+                        },
+                    },
+                    {
+                        name: "browser_tab_close",
+                        description: "Close a tab by ID",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                                tabId: {
+                                    type: "string",
+                                    description: "Tab ID to close",
+                                },
+                            },
+                            required: ["sessionId", "tabId"],
+                        },
+                    },
+                    {
+                        name: "browser_network_requests",
+                        description: "Get all network requests from the session",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "browser_console_messages",
+                        description: "Get all console messages from the session",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
+                    {
+                        name: "browser_generate_playwright_test",
+                        description: "Generate Playwright test code from recorded actions",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from browser_launch",
+                                },
+                            },
+                            required: ["sessionId"],
+                        },
+                    },
                 ],
             };
         });
@@ -406,13 +565,25 @@ class WebMCPServer {
                         return await this.handleBrowserLaunch(toolArgs);
                     case "browser_navigate":
                         await this.handleBrowserNavigate(toolArgs.sessionId, toolArgs.url);
-                        return { content: [{ type: "text", text: "Navigation completed successfully" }] };
+                        const navSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: "Navigation completed successfully" },
+                                { type: "text", text: `Page Snapshot:\n${navSnapshot}` }
+                            ] };
                     case "click":
                         await this.handleClick(toolArgs.sessionId, toolArgs.selector);
-                        return { content: [{ type: "text", text: "Element clicked successfully" }] };
+                        const clickSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: "Element clicked successfully" },
+                                { type: "text", text: `Page Snapshot:\n${clickSnapshot}` }
+                            ] };
                     case "type":
                         await this.handleType(toolArgs.sessionId, toolArgs.selector, toolArgs.text);
-                        return { content: [{ type: "text", text: "Text typed successfully" }] };
+                        const typeSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: "Text typed successfully" },
+                                { type: "text", text: `Page Snapshot:\n${typeSnapshot}` }
+                            ] };
                     case "screenshot":
                         const screenshotPath = await this.handleScreenshot(toolArgs.sessionId, toolArgs.path);
                         return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
@@ -427,13 +598,21 @@ class WebMCPServer {
                         return { content: [{ type: "text", text: snapshotResult }] };
                     case "hover":
                         await this.handleHover(toolArgs.sessionId, toolArgs.selector);
-                        return { content: [{ type: "text", text: "Element hovered successfully" }] };
+                        const hoverSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: "Element hovered successfully" },
+                                { type: "text", text: `Page Snapshot:\n${hoverSnapshot}` }
+                            ] };
                     case "drag":
                         await this.handleDrag(toolArgs.sessionId, toolArgs.sourceSelector, toolArgs.targetSelector);
                         return { content: [{ type: "text", text: "Element dragged successfully" }] };
                     case "key":
                         await this.handleKey(toolArgs.sessionId, toolArgs.key);
-                        return { content: [{ type: "text", text: `Key '${toolArgs.key}' pressed successfully` }] };
+                        const keySnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: `Key '${toolArgs.key}' pressed successfully` },
+                                { type: "text", text: `Page Snapshot:\n${keySnapshot}` }
+                            ] };
                     case "select":
                         await this.handleSelect(toolArgs.sessionId, toolArgs.selector, toolArgs.value);
                         return { content: [{ type: "text", text: "Option selected successfully" }] };
@@ -461,6 +640,41 @@ class WebMCPServer {
                     case "close":
                         await this.handleClose(toolArgs.sessionId);
                         return { content: [{ type: "text", text: "Session closed successfully" }] };
+                    case "browser_resize":
+                        await this.handleResize(toolArgs.sessionId, toolArgs.width, toolArgs.height);
+                        const resizeSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: `Browser resized to ${toolArgs.width}x${toolArgs.height}` },
+                                { type: "text", text: `Page Snapshot:\n${resizeSnapshot}` }
+                            ] };
+                    case "browser_handle_dialog":
+                        await this.handleDialogSetup(toolArgs.sessionId, toolArgs.action, toolArgs.promptText);
+                        return { content: [{ type: "text", text: `Dialog handler set to ${toolArgs.action}` }] };
+                    case "browser_tab_new":
+                        const newTabId = await this.handleNewTab(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: `New tab created with ID: ${newTabId}` }] };
+                    case "browser_tab_list":
+                        const tabs = await this.handleListTabs(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: JSON.stringify(tabs, null, 2) }] };
+                    case "browser_tab_select":
+                        await this.handleSelectTab(toolArgs.sessionId, toolArgs.tabId);
+                        const tabSnapshot = await this.handleSnapshot(toolArgs.sessionId);
+                        return { content: [
+                                { type: "text", text: `Tab ${toolArgs.tabId} selected` },
+                                { type: "text", text: `Page Snapshot:\n${tabSnapshot}` }
+                            ] };
+                    case "browser_tab_close":
+                        await this.handleCloseTab(toolArgs.sessionId, toolArgs.tabId);
+                        return { content: [{ type: "text", text: `Tab ${toolArgs.tabId} closed` }] };
+                    case "browser_network_requests":
+                        const requests = await this.handleNetworkRequests(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: JSON.stringify(requests, null, 2) }] };
+                    case "browser_console_messages":
+                        const messages = await this.handleConsoleMessages(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: JSON.stringify(messages, null, 2) }] };
+                    case "browser_generate_playwright_test":
+                        const testCode = await this.handleGenerateTest(toolArgs.sessionId);
+                        return { content: [{ type: "text", text: testCode }] };
                     default:
                         throw new Error(`Unknown tool: ${name}`);
                 }
@@ -575,16 +789,81 @@ class WebMCPServer {
         await this.driver.close(session);
         this.sessions.delete(sessionId);
     }
+    async handleResize(sessionId, width, height) {
+        const session = await this.getSession(sessionId);
+        await this.driver.resize(session, width, height);
+    }
+    async handleDialogSetup(sessionId, action, promptText) {
+        const session = await this.getSession(sessionId);
+        await this.driver.handleDialog(session, action, promptText);
+    }
+    async handleNewTab(sessionId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.newTab(session);
+    }
+    async handleListTabs(sessionId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.listTabs(session);
+    }
+    async handleSelectTab(sessionId, tabId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.selectTab(session, tabId);
+    }
+    async handleCloseTab(sessionId, tabId) {
+        const session = await this.getSession(sessionId);
+        await this.driver.closeTab(session, tabId);
+    }
+    async handleNetworkRequests(sessionId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.getNetworkRequests(session);
+    }
+    async handleConsoleMessages(sessionId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.getConsoleMessages(session);
+    }
+    async handleGenerateTest(sessionId) {
+        const session = await this.getSession(sessionId);
+        return await this.driver.generatePlaywrightTest(session);
+    }
+    async cleanup() {
+        console.error("[WEB-MCP] Cleaning up server resources...");
+        // Close all active sessions
+        for (const [sessionId, session] of this.sessions) {
+            try {
+                await this.driver.close(session);
+            }
+            catch (error) {
+                console.error(`[WEB-MCP] Error closing session ${sessionId}:`, error);
+            }
+        }
+        this.sessions.clear();
+    }
     async run() {
         try {
-            console.error("[DEBUG] Starting Web MCP server...");
+            console.error("[WEB-MCP] Starting Web MCP server...");
             const transport = new stdio_js_1.StdioServerTransport();
-            console.error("[DEBUG] Transport created, connecting...");
+            // Handle transport errors
+            transport.onerror = (error) => {
+                console.error("[WEB-MCP] Transport error:", error);
+            };
+            transport.onclose = () => {
+                console.error("[WEB-MCP] Transport closed");
+                // Don't exit the process, let the CLI handle it
+            };
+            console.error("[WEB-MCP] Connecting transport...");
             await this.server.connect(transport);
-            console.error("[DEBUG] Web MCP server connected and running");
+            console.error("[WEB-MCP] Transport connected successfully");
+            // Keep the connection alive
+            return new Promise((resolve, reject) => {
+                // This promise never resolves, keeping the server running
+                process.on("disconnect", () => {
+                    console.error("[WEB-MCP] Process disconnected");
+                    resolve();
+                });
+            });
         }
         catch (error) {
-            console.error("[DEBUG] Error in web server.run():", error);
+            console.error("[WEB-MCP] Failed to connect transport:", error);
             throw error;
         }
     }

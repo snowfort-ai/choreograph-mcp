@@ -4,15 +4,43 @@ import { Command } from "commander";
 import { WebDriver } from "./web-driver.js";
 import { WebMCPServer } from "./web-server.js";
 
+// Track server instance to handle cleanup
+let serverInstance: WebMCPServer | null = null;
+
 // Handle unhandled rejections
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-  process.exit(1);
+  console.error("[WEB-MCP] Unhandled Rejection at:", promise, "reason:", reason);
+  // Don't exit immediately - let MCP server handle errors gracefully
 });
 
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
-  process.exit(1);
+  console.error("[WEB-MCP] Uncaught Exception:", error);
+  // Only exit on truly fatal errors
+  if (error.message && error.message.includes('MCP Server')) {
+    process.exit(1);
+  }
+});
+
+// Handle process termination gracefully
+process.on("SIGINT", async () => {
+  console.error("[WEB-MCP] Received SIGINT, shutting down gracefully...");
+  if (serverInstance) {
+    await serverInstance.cleanup();
+  }
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.error("[WEB-MCP] Received SIGTERM, shutting down gracefully...");
+  if (serverInstance) {
+    await serverInstance.cleanup();
+  }
+  process.exit(0);
+});
+
+// Keep the process alive
+process.stdin.on("end", () => {
+  console.error("[WEB-MCP] stdin ended, keeping process alive...");
 });
 
 const program = new Command();
@@ -27,10 +55,12 @@ program
   .option("--name <name>", "Server name for MCP handshake", "circuit-web")
   .action(async (options) => {
     try {
-      const server = new WebMCPServer(options.name, "0.0.1");
-      await server.run();
+      console.error("[WEB-MCP] Starting MCP server...");
+      serverInstance = new WebMCPServer(options.name, "0.0.1");
+      await serverInstance.run();
+      console.error("[WEB-MCP] MCP server running");
     } catch (error) {
-      console.error("MCP Server Error:", error);
+      console.error("[WEB-MCP] Fatal MCP Server Error:", error);
       process.exit(1);
     }
   });

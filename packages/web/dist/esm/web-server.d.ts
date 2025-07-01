@@ -27,6 +27,16 @@ export declare class WebMCPServer {
     private handleContent;
     private handleTextContent;
     private handleClose;
+    private handleResize;
+    private handleDialogSetup;
+    private handleNewTab;
+    private handleListTabs;
+    private handleSelectTab;
+    private handleCloseTab;
+    private handleNetworkRequests;
+    private handleConsoleMessages;
+    private handleGenerateTest;
+    cleanup(): Promise<void>;
     run(): Promise<void>;
 }
 //# sourceMappingURL=web-server.d.ts.map
