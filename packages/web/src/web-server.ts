@@ -953,26 +953,26 @@ export class WebMCPServer {
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
       
-      return new Promise((resolve, reject) => {
-        const cleanup = () => {
-          clearInterval(keepAlive);
-          console.error("[WEB-MCP] Server shutting down gracefully");
-          resolve();
-        };
-        
-        process.on("disconnect", () => {
-          console.error("[WEB-MCP] Process disconnected");
-          cleanup();
-        });
-        
-        process.on("SIGPIPE", () => {
-          console.error("[WEB-MCP] SIGPIPE received - broken pipe");
-          cleanup();
-        });
-        
-        // Never let this promise resolve normally
-        // The process should stay alive until explicitly terminated
+      // Setup cleanup handlers but don't return a promise that blocks
+      const cleanup = () => {
+        clearInterval(keepAlive);
+        console.error("[WEB-MCP] Server shutting down gracefully");
+      };
+      
+      process.on("disconnect", () => {
+        console.error("[WEB-MCP] Process disconnected");
+        cleanup();
+        process.exit(0);
       });
+      
+      process.on("SIGPIPE", () => {
+        console.error("[WEB-MCP] SIGPIPE received - broken pipe");
+        cleanup();
+        process.exit(0);
+      });
+      
+      // Don't return a hanging promise - let the server.connect() promise resolve normally
+      console.error("[WEB-MCP] Server ready for requests");
     } catch (error) {
       console.error("[WEB-MCP] Failed to connect transport:", error);
       console.error("[WEB-MCP] Error details:", error instanceof Error ? error.stack : error);

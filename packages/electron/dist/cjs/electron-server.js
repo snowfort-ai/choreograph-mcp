@@ -1118,23 +1118,23 @@ class ElectronMCPServer {
             // Keep process alive with multiple fallbacks
             process.stdin.resume();
             process.stdin.setEncoding('utf8');
-            return new Promise((resolve, reject) => {
-                const cleanup = () => {
-                    clearInterval(keepAlive);
-                    console.error("[ELECTRON-MCP] Server shutting down gracefully");
-                    resolve();
-                };
-                process.on("disconnect", () => {
-                    console.error("[ELECTRON-MCP] Process disconnected");
-                    cleanup();
-                });
-                process.on("SIGPIPE", () => {
-                    console.error("[ELECTRON-MCP] SIGPIPE received - broken pipe");
-                    cleanup();
-                });
-                // Never let this promise resolve normally
-                // The process should stay alive until explicitly terminated
+            // Setup cleanup handlers but don't return a promise that blocks
+            const cleanup = () => {
+                clearInterval(keepAlive);
+                console.error("[ELECTRON-MCP] Server shutting down gracefully");
+            };
+            process.on("disconnect", () => {
+                console.error("[ELECTRON-MCP] Process disconnected");
+                cleanup();
+                process.exit(0);
             });
+            process.on("SIGPIPE", () => {
+                console.error("[ELECTRON-MCP] SIGPIPE received - broken pipe");
+                cleanup();
+                process.exit(0);
+            });
+            // Don't return a hanging promise - let the server.connect() promise resolve normally
+            console.error("[ELECTRON-MCP] Server ready for requests");
         }
         catch (error) {
             console.error("[ELECTRON-MCP] Failed to connect transport:", error);
