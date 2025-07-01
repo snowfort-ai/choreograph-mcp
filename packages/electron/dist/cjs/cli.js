@@ -40,12 +40,12 @@ const program = new commander_1.Command();
 program
     .name("circuit-electron")
     .description("Snowfort Circuit Electron MCP - Computer use for webapps and electron apps")
-    .version("0.0.1")
+    .version("0.0.6")
     .option("--name <name>", "Server name for MCP handshake", "circuit-electron")
     .action(async (options) => {
     try {
         console.error("[ELECTRON-MCP] Starting MCP server...");
-        serverInstance = new electron_server_js_1.ElectronMCPServer(options.name, "0.0.1");
+        serverInstance = new electron_server_js_1.ElectronMCPServer(options.name, "0.0.6");
         await serverInstance.run();
         console.error("[ELECTRON-MCP] MCP server running");
     }
