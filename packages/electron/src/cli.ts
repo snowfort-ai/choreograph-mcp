@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Apply buffer patch for Node.js v24 compatibility before any MCP imports
+import "@snowfort/circuit-core/buffer-patch.js";
+
 import { Command } from "commander";
 import { ElectronDriver } from "./electron-driver.js";
 import { ElectronMCPServer } from "./electron-server.js";
@@ -48,12 +51,12 @@ const program = new Command();
 program
   .name("circuit-electron")
   .description("Snowfort Circuit Electron MCP - Computer use for webapps and electron apps")
-  .version("0.0.6")
+  .version("0.0.14")
   .option("--name <name>", "Server name for MCP handshake", "circuit-electron")
   .action(async (options) => {
     try {
       console.error("[ELECTRON-MCP] Starting MCP server...");
-      serverInstance = new ElectronMCPServer(options.name, "0.0.6");
+      serverInstance = new ElectronMCPServer(options.name, "0.0.14");
       await serverInstance.run();
       console.error("[ELECTRON-MCP] MCP server running");
     } catch (error) {
