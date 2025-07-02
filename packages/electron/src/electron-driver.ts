@@ -1,5 +1,5 @@
 // Import from playwright-core (will be overridden with project version)
-import { _electron as electronDefault, ElectronApplication, Page } from "playwright-core";
+import { _electron as electronDefault, ElectronApplication, Page, Request, ConsoleMessage } from "playwright-core";
 import { Driver, LaunchOpts, Session } from "@snowfort/circuit-core";
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
@@ -34,6 +34,8 @@ export interface ElectronSession extends Session {
   windows: Map<string, Page>;
   options?: ElectronLaunchOpts;
   devServerProcess?: ChildProcess;
+  networkRequests: Request[];
+  consoleMessages: ConsoleMessage[];
 }
 
 export class ElectronDriver implements Driver {
@@ -440,7 +442,14 @@ export class ElectronDriver implements Driver {
       mainWindow,
       windows,
       options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
+      networkRequests: [],
+      consoleMessages: [],
     };
+    
+    // Set up monitoring if we have a main window
+    if (mainWindow) {
+      this.setupPageMonitoring(mainWindow, session);
+    }
     
     return session;
   }
@@ -481,7 +490,14 @@ export class ElectronDriver implements Driver {
       mainWindow,
       windows,
       options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
+      networkRequests: [],
+      consoleMessages: [],
     };
+    
+    // Set up monitoring if we have a main window
+    if (mainWindow) {
+      this.setupPageMonitoring(mainWindow, session);
+    }
 
     return session;
   }
@@ -732,7 +748,14 @@ export class ElectronDriver implements Driver {
         windows,
         options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
         devServerProcess,
+        networkRequests: [],
+        consoleMessages: [],
       };
+      
+      // Set up monitoring if we have a main window
+      if (mainWindow) {
+        this.setupPageMonitoring(mainWindow, session);
+      }
 
       return session;
       
@@ -1219,5 +1242,35 @@ export class ElectronDriver implements Driver {
       }
       throw error;
     }
+  }
+
+  private setupPageMonitoring(page: Page, session: ElectronSession): void {
+    // Network monitoring
+    page.on('request', (request) => {
+      session.networkRequests.push(request);
+    });
+    
+    // Console monitoring
+    page.on('console', (message) => {
+      session.consoleMessages.push(message);
+    });
+  }
+
+  async getNetworkRequests(session: Session): Promise<Array<{url: string, method: string, status?: number, timestamp: number}>> {
+    const electronSession = session as ElectronSession;
+    return electronSession.networkRequests.map(req => ({
+      url: req.url(),
+      method: req.method(),
+      timestamp: Date.now() // Approximation, would need to track actual timestamps
+    }));
+  }
+
+  async getConsoleMessages(session: Session): Promise<Array<{type: string, text: string, timestamp: number}>> {
+    const electronSession = session as ElectronSession;
+    return electronSession.consoleMessages.map(msg => ({
+      type: msg.type(),
+      text: msg.text(),
+      timestamp: Date.now() // Approximation, would need to track actual timestamps
+    }));
   }
 }

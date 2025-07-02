@@ -89,7 +89,7 @@ click({"sessionId": "...", "selector": "button[title='New File']"})
 - **JavaScript Execution**: Run custom scripts in page context
 - **Smart Waiting**: Element appearance, network idle, page load states
 
-### 🖥️ **Desktop Automation (25+ Tools)**
+### 🖥️ **Desktop Automation (32 Tools)**
 - **🎯 AI-Optimized Desktop Control**: Launches and controls Electron apps with auto-snapshots
 - **📸 Smart Screenshot Compression**: JPEG compression for faster AI workflows (configurable)
 - **🔧 Development Mode Support**: Launch apps during development with auto-detection
@@ -100,6 +100,7 @@ click({"sessionId": "...", "selector": "button[title='New File']"})
 - **Enhanced Targeting**: Role-based clicks, nth element selection, text-based targeting
 - **Accessibility-First**: Built-in accessibility tree navigation with element refs
 - **State Management**: Advanced page state waiting and monitoring
+- **🐛 Console & Network Monitoring**: Capture application logs and network requests for debugging
 - **All Web Tools**: Every web automation tool works in desktop context
 
 ### 🔧 **Architecture Benefits**
@@ -138,7 +139,6 @@ click({"sessionId": "...", "selector": "button[title='New File']"})
 | `forward` | Navigate forward in history | `sessionId` |
 | `refresh` | Reload current page | `sessionId` |
 | `screenshot` | Take compressed screenshot | `sessionId`, `path` |
-| `snapshot` | Get accessibility tree with element refs | `sessionId`, `windowId` |
 | `snapshot` | Get accessibility tree with element refs | `sessionId` |
 | `pdf` | Generate PDF of page | `sessionId`, `path` |
 | `content` | Get HTML content | `sessionId` |
@@ -163,7 +163,10 @@ click({"sessionId": "...", "selector": "button[title='New File']"})
 | `keyboard_type` | Type with delay | `sessionId`, `text`, `delay` |
 | `add_locator_handler` | Handle modals/popups | `sessionId`, `selector`, `action` |
 | `wait_for_load_state` | Wait for page state | `sessionId`, `state` |
-| **+ All Web Tools** | All 29 web tools with optional `windowId` | |
+| `smart_click` | Smart click with auto-detection (refs/text/CSS) | `sessionId`, `target`, `strategy`, `windowId` |
+| `browser_console_messages` | Get console logs from Electron app | `sessionId` |
+| `browser_network_requests` | Get network requests from Electron app | `sessionId` |
+| **+ Shared Web Tools** | Core web tools: `click`, `type`, `screenshot`, `evaluate`, etc. | |
 
 ## 💡 Usage Examples
 
@@ -389,6 +392,24 @@ await click({"sessionId": session.id, "selector": ".channel-name", "windowId": "
 await type({"sessionId": session.id, "selector": "[data-qa='message-input']", "text": "Hello team!", "windowId": "main"})
 ```
 
+#### **Console & Network Monitoring**
+```javascript
+// Launch Electron app and monitor activity
+const session = await app_launch({"app": "/Applications/MyElectronApp.app"})
+
+// Perform some actions that generate logs/network activity
+await click({"sessionId": session.id, "selector": "#load-data-button"})
+await wait_for_load_state({"sessionId": session.id, "state": "networkidle"})
+
+// Get console logs for debugging
+const consoleLogs = await browser_console_messages({"sessionId": session.id})
+console.log("App console output:", consoleLogs)
+
+// Get network requests to see API calls
+const networkRequests = await browser_network_requests({"sessionId": session.id})
+console.log("Network activity:", networkRequests)
+```
+
 ### Advanced Configuration
 
 #### **Web Development Mode with Full Quality**
@@ -527,7 +548,7 @@ Options:
 Published Packages:
 ├── @snowfort/circuit-core@latest      # Core MCP infrastructure
 ├── @snowfort/circuit-web@latest       # Web automation server (29 tools)
-└── @snowfort/circuit-electron@latest  # Desktop automation server (25+ tools)
+└── @snowfort/circuit-electron@latest  # Desktop automation server (32 tools)
 
 Local Development:
 packages/

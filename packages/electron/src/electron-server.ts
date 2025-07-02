@@ -755,6 +755,34 @@ export class ElectronMCPServer {
               required: ["sessionId", "target"],
             },
           },
+          {
+            name: "browser_network_requests",
+            description: "Get all network requests from the session",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from app_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
+          {
+            name: "browser_console_messages",
+            description: "Get all console messages from the session",
+            inputSchema: {
+              type: "object",
+              properties: {
+                sessionId: {
+                  type: "string",
+                  description: "Session ID returned from app_launch",
+                },
+              },
+              required: ["sessionId"],
+            },
+          },
         ],
       };
     });
@@ -946,6 +974,12 @@ export class ElectronMCPServer {
               toolArgs.strategy as string,
               toolArgs.windowId as string
             );
+
+          case "browser_network_requests":
+            return await this.handleNetworkRequests(toolArgs.sessionId as string);
+
+          case "browser_console_messages":
+            return await this.handleConsoleMessages(toolArgs.sessionId as string);
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -1300,6 +1334,18 @@ export class ElectronMCPServer {
     const session = await this.getSession(sessionId);
     await this.driver.close(session);
     this.sessions.delete(sessionId);
+  }
+
+  private async handleNetworkRequests(sessionId: string): Promise<any> {
+    const session = await this.getSession(sessionId);
+    const requests = await this.driver.getNetworkRequests(session);
+    return { content: [{ type: "text", text: JSON.stringify(requests, null, 2) }] };
+  }
+
+  private async handleConsoleMessages(sessionId: string): Promise<any> {
+    const session = await this.getSession(sessionId);
+    const messages = await this.driver.getConsoleMessages(session);
+    return { content: [{ type: "text", text: JSON.stringify(messages, null, 2) }] };
   }
 
   async cleanup(): Promise<void> {
