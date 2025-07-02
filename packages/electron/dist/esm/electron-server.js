@@ -86,13 +86,21 @@ export class ElectronMCPServer {
                                     type: "boolean",
                                     description: "Automatically kill processes on conflicting ports and retry (default: true)",
                                 },
+                                includeSnapshots: {
+                                    type: "boolean",
+                                    description: "Include window snapshots in action responses (default: false for minimal context)",
+                                },
+                                windowTimeout: {
+                                    type: "number",
+                                    description: "Timeout for window detection in milliseconds (default: 60000)",
+                                },
                             },
                             required: ["app"],
                         },
                     },
                     {
                         name: "click",
-                        description: "Click element and get updated window snapshot with element references",
+                        description: "Click element (snapshot included if includeSnapshots=true)",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -114,7 +122,7 @@ export class ElectronMCPServer {
                     },
                     {
                         name: "type",
-                        description: "Type text and get updated window snapshot with element references",
+                        description: "Type text into element (snapshot included if includeSnapshots=true)",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -469,7 +477,11 @@ export class ElectronMCPServer {
                                 state: {
                                     type: "string",
                                     enum: ["load", "domcontentloaded", "networkidle"],
-                                    description: "Load state to wait for (default: 'load')",
+                                    description: "Load state to wait for. 'load' (default) - page finished loading, 'domcontentloaded' - DOM parsed, 'networkidle' - no network requests for 500ms (may timeout in apps with persistent connections)",
+                                },
+                                timeout: {
+                                    type: "number",
+                                    description: "Timeout in milliseconds (default: 30000 for load/domcontentloaded, 10000 for networkidle)",
                                 },
                                 windowId: {
                                     type: "string",
@@ -709,6 +721,33 @@ export class ElectronMCPServer {
                             required: ["sessionId"],
                         },
                     },
+                    {
+                        name: "smart_click",
+                        description: "Smart click that automatically handles refs (e1, e2...), text, or CSS selectors",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                sessionId: {
+                                    type: "string",
+                                    description: "Session ID returned from app_launch",
+                                },
+                                target: {
+                                    type: "string",
+                                    description: "Element ref (e.g. 'e16'), text content, or CSS selector",
+                                },
+                                strategy: {
+                                    type: "string",
+                                    enum: ["auto", "ref", "text", "selector"],
+                                    description: "Strategy to use (default: auto-detect)",
+                                },
+                                windowId: {
+                                    type: "string",
+                                    description: "Optional window ID (defaults to main window)",
+                                },
+                            },
+                            required: ["sessionId", "target"],
+                        },
+                    },
                 ],
             };
         });
@@ -721,18 +760,22 @@ export class ElectronMCPServer {
                         return await this.handleAppLaunch(toolArgs);
                     case "click":
                         await this.handleClick(toolArgs.sessionId, toolArgs.selector, toolArgs.windowId);
-                        const clickSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
-                        return { content: [
-                                { type: "text", text: "Element clicked successfully" },
-                                { type: "text", text: `Window Snapshot:\n${clickSnapshot}` }
-                            ] };
+                        const clickSession = await this.getSession(toolArgs.sessionId);
+                        const clickContent = [{ type: "text", text: "Element clicked successfully" }];
+                        if (this.shouldIncludeSnapshot(clickSession)) {
+                            const clickSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                            clickContent.push({ type: "text", text: `Window Snapshot:\n${clickSnapshot}` });
+                        }
+                        return { content: clickContent };
                     case "type":
                         await this.handleType(toolArgs.sessionId, toolArgs.selector, toolArgs.text, toolArgs.windowId);
-                        const typeSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
-                        return { content: [
-                                { type: "text", text: "Text typed successfully" },
-                                { type: "text", text: `Window Snapshot:\n${typeSnapshot}` }
-                            ] };
+                        const typeSession = await this.getSession(toolArgs.sessionId);
+                        const typeContent = [{ type: "text", text: "Text typed successfully" }];
+                        if (this.shouldIncludeSnapshot(typeSession)) {
+                            const typeSnapshot = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
+                            typeContent.push({ type: "text", text: `Window Snapshot:\n${typeSnapshot}` });
+                        }
+                        return { content: typeContent };
                     case "screenshot":
                         const screenshotPath = await this.handleScreenshot(toolArgs.sessionId, toolArgs.path, toolArgs.windowId);
                         return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
@@ -793,7 +836,7 @@ export class ElectronMCPServer {
                                 { type: "text", text: `Window Snapshot:\n${kbTypeSnapshot}` }
                             ] };
                     case "wait_for_load_state":
-                        await this.handleWaitForLoadState(toolArgs.sessionId, toolArgs.state, toolArgs.windowId);
+                        await this.handleWaitForLoadState(toolArgs.sessionId, toolArgs.state, toolArgs.timeout, toolArgs.windowId);
                         return { content: [{ type: "text", text: "Page load state reached" }] };
                     case "snapshot":
                         const snapshotResult = await this.handleSnapshot(toolArgs.sessionId, toolArgs.windowId);
@@ -852,11 +895,15 @@ export class ElectronMCPServer {
                     case "text_content":
                         const textContent = await this.handleTextContent(toolArgs.sessionId, toolArgs.windowId);
                         return { content: [{ type: "text", text: textContent }] };
+                    case "smart_click":
+                        return await this.handleSmartClick(toolArgs.sessionId, toolArgs.target, toolArgs.strategy, toolArgs.windowId);
                     default:
                         throw new Error(`Unknown tool: ${name}`);
                 }
             }
             catch (error) {
+                console.error(`[ELECTRON-MCP] Tool error for ${name}:`, error);
+                // Return error but don't throw - this prevents transport from closing
                 return {
                     content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
                     isError: true,
@@ -870,6 +917,9 @@ export class ElectronMCPServer {
             throw new Error(`Session not found: ${sessionId}`);
         }
         return session;
+    }
+    shouldIncludeSnapshot(session) {
+        return session.options?.includeSnapshots ?? false;
     }
     async handleAppLaunch(args) {
         let debugInfo = [];
@@ -888,6 +938,7 @@ export class ElectronMCPServer {
                 screenshotQuality: args.screenshotQuality,
                 disableDevtools: args.disableDevtools,
                 killPortConflicts: args.killPortConflicts,
+                includeSnapshots: args.includeSnapshots ?? false, // Default to false for minimal context
             };
             debugInfo.push(`[DEBUG] Launch attempt for app: ${opts.app}`);
             debugInfo.push(`[DEBUG] Mode: ${opts.mode || 'auto'}`);
@@ -931,6 +982,82 @@ export class ElectronMCPServer {
     async handleClick(sessionId, selector, windowId) {
         const session = await this.getSession(sessionId);
         await this.driver.click(session, selector, windowId);
+    }
+    async handleSmartClick(sessionId, target, strategy, windowId) {
+        const session = await this.getSession(sessionId);
+        const actualStrategy = strategy || 'auto';
+        try {
+            // Determine click strategy
+            if (actualStrategy === 'ref' || (actualStrategy === 'auto' && /^e\d+$/.test(target))) {
+                // Handle ref-based clicking (e1, e2, etc.)
+                const evalScript = `
+          (() => {
+            // Try to find element by ref attribute
+            const elem = document.querySelector('[ref="${target}"]');
+            if (elem) {
+              elem.click();
+              return 'Clicked element with ref="${target}"';
+            }
+            
+            // Fallback: search all elements for ref attribute
+            const allElems = Array.from(document.querySelectorAll('*'));
+            const refElem = allElems.find(el => el.getAttribute('ref') === '${target}');
+            if (refElem) {
+              refElem.click();
+              return 'Clicked element with ref="${target}" (fallback)';
+            }
+            
+            throw new Error('Element with ref="${target}" not found');
+          })()
+        `;
+                const result = await this.driver.evaluate(session, evalScript, windowId);
+                const content = [{ type: "text", text: result }];
+                if (this.shouldIncludeSnapshot(session)) {
+                    const snapshot = await this.handleSnapshot(sessionId, windowId);
+                    content.push({ type: "text", text: `Window Snapshot:\n${snapshot}` });
+                }
+                return { content };
+            }
+            else if (actualStrategy === 'text' || (actualStrategy === 'auto' && !target.includes('[') && !target.includes('.'))) {
+                // Handle text-based clicking
+                const evalScript = `
+          (() => {
+            const buttons = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+            const targetButton = buttons.find(btn => 
+              btn.textContent && btn.textContent.trim().includes('${target.replace(/'/g, "\\'").replace(/"/g, '\\"')}')
+            );
+            if (targetButton) {
+              targetButton.click();
+              return 'Clicked element containing text: "${target}"';
+            }
+            throw new Error('No clickable element found with text: "${target}"');
+          })()
+        `;
+                const result = await this.driver.evaluate(session, evalScript, windowId);
+                const content = [{ type: "text", text: result }];
+                if (this.shouldIncludeSnapshot(session)) {
+                    const snapshot = await this.handleSnapshot(sessionId, windowId);
+                    content.push({ type: "text", text: `Window Snapshot:\n${snapshot}` });
+                }
+                return { content };
+            }
+            else {
+                // Handle as CSS selector
+                await this.driver.click(session, target, windowId);
+                const content = [{ type: "text", text: `Clicked element with selector: ${target}` }];
+                if (this.shouldIncludeSnapshot(session)) {
+                    const snapshot = await this.handleSnapshot(sessionId, windowId);
+                    content.push({ type: "text", text: `Window Snapshot:\n${snapshot}` });
+                }
+                return { content };
+            }
+        }
+        catch (error) {
+            return {
+                content: [{ type: "text", text: `Smart click failed: ${error instanceof Error ? error.message : String(error)}` }],
+                isError: true,
+            };
+        }
     }
     async handleType(sessionId, selector, text, windowId) {
         const session = await this.getSession(sessionId);
@@ -1013,13 +1140,25 @@ export class ElectronMCPServer {
         const session = await this.getSession(sessionId);
         await this.driver.keyboardType(session, text, delay, windowId);
     }
-    async handleWaitForLoadState(sessionId, state, windowId) {
+    async handleWaitForLoadState(sessionId, state, timeout, windowId) {
         const session = await this.getSession(sessionId);
-        await this.driver.waitForLoadState(session, state, windowId);
+        // Use shorter default timeout for networkidle to prevent hanging
+        const defaultTimeout = state === 'networkidle' ? 10000 : 30000;
+        const effectiveTimeout = timeout !== undefined ? timeout : defaultTimeout;
+        console.error(`[ELECTRON-MCP] waitForLoadState called - state: ${state || 'load'}, timeout: ${effectiveTimeout}ms, windowId: ${windowId || 'main'}`);
+        try {
+            await this.driver.waitForLoadState(session, state, effectiveTimeout, windowId);
+            console.error(`[ELECTRON-MCP] waitForLoadState completed successfully`);
+        }
+        catch (error) {
+            console.error(`[ELECTRON-MCP] waitForLoadState failed:`, error);
+            throw error;
+        }
     }
     async handleSnapshot(sessionId, windowId) {
         const session = await this.getSession(sessionId);
-        return await this.driver.snapshot(session, windowId);
+        // Always use interactive filter by default to reduce context usage
+        return await this.driver.snapshot(session, windowId, 'interactive');
     }
     async handleHover(sessionId, selector, windowId) {
         const session = await this.getSession(sessionId);

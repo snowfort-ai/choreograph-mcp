@@ -97,6 +97,10 @@ export class ElectronMCPServer {
                   type: "boolean",
                   description: "Include window snapshots in action responses (default: false for minimal context)",
                 },
+                windowTimeout: {
+                  type: "number",
+                  description: "Timeout for window detection in milliseconds (default: 60000)",
+                },
               },
               required: ["app"],
             },

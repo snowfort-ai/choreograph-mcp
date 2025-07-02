@@ -89,19 +89,46 @@ class ElectronDriver {
     }
     async getMainWindow(electronApp, timeout = 10000) {
         const startTime = Date.now();
+        console.error(`[ELECTRON-DRIVER] Waiting for main window (timeout: ${timeout}ms)...`);
         while (Date.now() - startTime < timeout) {
             const windows = await electronApp.windows();
+            console.error(`[ELECTRON-DRIVER] Found ${windows.length} windows`);
             for (const window of windows) {
                 const windowType = await this.getWindowType(window);
+                let title = 'unknown';
+                let url = 'unknown';
+                try {
+                    title = await window.title();
+                }
+                catch (e) {
+                    // Window might be closed or not ready
+                }
+                try {
+                    url = await window.url();
+                }
+                catch (e) {
+                    // Window might be closed or not ready
+                }
+                console.error(`[ELECTRON-DRIVER] Window: type=${windowType}, title="${title}", url="${url}"`);
                 if (windowType === 'main') {
+                    console.error(`[ELECTRON-DRIVER] ✓ Found main window`);
                     return window;
                 }
             }
             // Wait a bit before trying again
             await new Promise(resolve => setTimeout(resolve, 100));
         }
+        console.error(`[ELECTRON-DRIVER] No main window found after ${timeout}ms, falling back to firstWindow()`);
         // Fallback to firstWindow if no main window found
-        return await electronApp.firstWindow();
+        try {
+            const firstWindow = await electronApp.firstWindow();
+            console.error(`[ELECTRON-DRIVER] ✓ Got first window via fallback`);
+            return firstWindow;
+        }
+        catch (error) {
+            console.error(`[ELECTRON-DRIVER] ✗ firstWindow() failed:`, error);
+            throw error;
+        }
     }
     async startDevServer(projectPath, startScript) {
         return new Promise((resolve, reject) => {
@@ -248,9 +275,14 @@ class ElectronDriver {
             }
         }
         catch (error) {
-            debugInfo.push(`[PLAYWRIGHT-DEBUG] ✗ Failed to load project Playwright: ${error}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            debugInfo.push(`[PLAYWRIGHT-DEBUG] ✗ Failed to load project Playwright: ${errorMessage}`);
+            // If it's just a missing file, that's expected - not an error
+            if (errorMessage.includes('ENOENT') || errorMessage.includes('no such file or directory')) {
+                debugInfo.push(`[PLAYWRIGHT-DEBUG] Project doesn't have playwright-core installed (this is normal)`);
+            }
         }
-        debugInfo.push(`[PLAYWRIGHT-DEBUG] Falling back to NPX-cached Playwright`);
+        debugInfo.push(`[PLAYWRIGHT-DEBUG] Using bundled Playwright from MCP`);
         return { electron: playwright_core_1._electron, debugInfo };
     }
     async launch(opts) {
@@ -353,7 +385,7 @@ class ElectronDriver {
         // Launch Electron application
         const electronApp = await electron.launch(launchConfig);
         // Wait for main window
-        const mainWindow = await this.getMainWindow(electronApp);
+        const mainWindow = await this.getMainWindow(electronApp, opts.windowTimeout || 60000);
         const windows = new Map();
         if (mainWindow) {
             windows.set("main", mainWindow);
@@ -386,7 +418,7 @@ class ElectronDriver {
             launchConfig.env = { ...process.env, ...opts.env };
         }
         const electronApp = await electron.launch(launchConfig);
-        const mainWindow = await this.getMainWindow(electronApp);
+        const mainWindow = await this.getMainWindow(electronApp, opts.windowTimeout || 60000);
         const windows = new Map();
         if (mainWindow) {
             windows.set("main", mainWindow);
@@ -793,26 +825,52 @@ class ElectronDriver {
         }
         return screenshotPath;
     }
-    async snapshot(session, windowId) {
+    async snapshot(session, windowId, filter) {
         const electronSession = session;
         const window = this.getWindow(electronSession, windowId);
         const snapshot = await window.accessibility.snapshot();
-        const enhancedSnapshot = this.enhanceSnapshotWithRefs(snapshot);
+        const enhancedSnapshot = this.enhanceSnapshotWithRefs(snapshot, filter);
         return JSON.stringify(enhancedSnapshot, null, 2);
     }
-    enhanceSnapshotWithRefs(snapshot) {
+    enhanceSnapshotWithRefs(snapshot, filter) {
         if (!snapshot)
             return snapshot;
+        const interactiveRoles = new Set([
+            'button', 'link', 'textbox', 'textarea', 'combobox', 'listbox',
+            'checkbox', 'radio', 'switch', 'slider', 'spinbutton', 'searchbox',
+            'menuitem', 'menu', 'tab', 'option', 'cell', 'gridcell'
+        ]);
         let refCounter = 1;
         const addRefs = (node) => {
             if (!node || typeof node !== 'object')
                 return node;
+            // Skip non-interactive elements when filtering
+            if (filter === 'interactive' && node.role && !interactiveRoles.has(node.role.toLowerCase())) {
+                // Skip this node but process its children
+                if (node.children && Array.isArray(node.children)) {
+                    const filteredChildren = node.children
+                        .map(addRefs)
+                        .filter((child) => child !== null);
+                    // If this is a container with interactive children, keep it
+                    if (filteredChildren.length > 0) {
+                        return {
+                            ...node,
+                            children: filteredChildren,
+                            ref: `e${refCounter++}`
+                        };
+                    }
+                    return null;
+                }
+                return null;
+            }
             const enhanced = { ...node };
             if (node.role && node.role !== 'WebArea' && node.role !== 'RootWebArea') {
                 enhanced.ref = `e${refCounter++}`;
             }
             if (node.children && Array.isArray(node.children)) {
-                enhanced.children = node.children.map(addRefs);
+                enhanced.children = node.children
+                    .map(addRefs)
+                    .filter((child) => child !== null);
             }
             return enhanced;
         };
@@ -1014,10 +1072,22 @@ class ElectronDriver {
         const window = this.getWindow(electronSession, windowId);
         await window.keyboard.type(text, { delay });
     }
-    async waitForLoadState(session, state, windowId) {
+    async waitForLoadState(session, state, timeout, windowId) {
         const electronSession = session;
         const window = this.getWindow(electronSession, windowId);
-        await window.waitForLoadState(state || 'load');
+        // Use the timeout passed from the server (which already has the correct defaults)
+        const effectiveTimeout = timeout || 30000;
+        try {
+            await window.waitForLoadState(state || 'load', { timeout: effectiveTimeout });
+        }
+        catch (error) {
+            if (error.message?.includes('Timeout') && state === 'networkidle') {
+                console.error(`[ELECTRON-DRIVER] waitForLoadState('networkidle') timed out after ${effectiveTimeout}ms - this is common for apps with persistent network connections`);
+                // Don't throw for networkidle timeouts - the page is likely ready anyway
+                return;
+            }
+            throw error;
+        }
     }
 }
 exports.ElectronDriver = ElectronDriver;

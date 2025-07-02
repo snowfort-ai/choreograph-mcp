@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Apply buffer patch for Node.js v24 compatibility before any MCP imports
+import "@snowfort/circuit-core/buffer-patch.js";
+
 import { Command } from "commander";
 import { WebDriver } from "./web-driver.js";
 import { WebMCPServer } from "./web-server.js";
@@ -48,7 +51,7 @@ const program = new Command();
 program
   .name("circuit-web")
   .description("Snowfort Circuit Web MCP - Computer use for webapps and electron apps")
-  .version("0.0.6")
+  .version("0.0.13")
   .option("--port <port>", "Port to listen on (stdio mode only)")
   .option("--browser <browser>", "Default browser engine", "chromium")
   .option("--headed", "Run in headed mode by default")
@@ -56,7 +59,7 @@ program
   .action(async (options) => {
     try {
       console.error("[WEB-MCP] Starting MCP server...");
-      serverInstance = new WebMCPServer(options.name, "0.0.6");
+      serverInstance = new WebMCPServer(options.name, "0.0.13");
       await serverInstance.run();
       console.error("[WEB-MCP] MCP server running");
     } catch (error) {

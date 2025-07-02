@@ -7,8 +7,10 @@ export declare class ElectronMCPServer {
     constructor(name: string, version?: string);
     private setupHandlers;
     private getSession;
+    private shouldIncludeSnapshot;
     private handleAppLaunch;
     private handleClick;
+    private handleSmartClick;
     private handleType;
     private handleScreenshot;
     private handleEvaluate;

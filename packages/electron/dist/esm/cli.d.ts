@@ -1,3 +1,3 @@
 #!/usr/bin/env node
-export {};
+import "@snowfort/circuit-core/buffer-patch.js";
 //# sourceMappingURL=cli.d.ts.map

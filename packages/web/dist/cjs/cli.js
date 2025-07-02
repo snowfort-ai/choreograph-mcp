@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+// Apply buffer patch for Node.js v24 compatibility before any MCP imports
+require("@snowfort/circuit-core/buffer-patch.js");
 const commander_1 = require("commander");
 const web_server_js_1 = require("./web-server.js");
 // Track server instance to handle cleanup
@@ -40,7 +42,7 @@ const program = new commander_1.Command();
 program
     .name("circuit-web")
     .description("Snowfort Circuit Web MCP - Computer use for webapps and electron apps")
-    .version("0.0.6")
+    .version("0.0.13")
     .option("--port <port>", "Port to listen on (stdio mode only)")
     .option("--browser <browser>", "Default browser engine", "chromium")
     .option("--headed", "Run in headed mode by default")
@@ -48,7 +50,7 @@ program
     .action(async (options) => {
     try {
         console.error("[WEB-MCP] Starting MCP server...");
-        serverInstance = new web_server_js_1.WebMCPServer(options.name, "0.0.6");
+        serverInstance = new web_server_js_1.WebMCPServer(options.name, "0.0.13");
         await serverInstance.run();
         console.error("[WEB-MCP] MCP server running");
     }

@@ -14,6 +14,8 @@ export interface ElectronLaunchOpts extends LaunchOpts {
     screenshotQuality?: number;
     disableDevtools?: boolean;
     killPortConflicts?: boolean;
+    includeSnapshots?: boolean;
+    windowTimeout?: number;
 }
 export interface ElectronSession extends Session {
     electronApp: ElectronApplication;
@@ -40,7 +42,7 @@ export declare class ElectronDriver implements Driver {
     private hasPackageJson;
     private findElectronExecutable;
     screenshot(session: Session, path?: string, windowId?: string): Promise<string>;
-    snapshot(session: Session, windowId?: string): Promise<string>;
+    snapshot(session: Session, windowId?: string, filter?: 'all' | 'interactive'): Promise<string>;
     private enhanceSnapshotWithRefs;
     click(session: Session, selector: string, windowId?: string): Promise<void>;
     type(session: Session, selector: string, text: string, windowId?: string): Promise<void>;
@@ -72,6 +74,6 @@ export declare class ElectronDriver implements Driver {
     clickByRole(session: Session, role: string, name?: string, windowId?: string): Promise<void>;
     clickNth(session: Session, selector: string, index: number, windowId?: string): Promise<void>;
     keyboardType(session: Session, text: string, delay?: number, windowId?: string): Promise<void>;
-    waitForLoadState(session: Session, state?: "load" | "domcontentloaded" | "networkidle", windowId?: string): Promise<void>;
+    waitForLoadState(session: Session, state?: "load" | "domcontentloaded" | "networkidle", timeout?: number, windowId?: string): Promise<void>;
 }
 //# sourceMappingURL=electron-driver.d.ts.map
