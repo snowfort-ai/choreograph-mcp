@@ -361,7 +361,13 @@ export class ElectronDriver {
             mainWindow,
             windows,
             options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
+            networkRequests: [],
+            consoleMessages: [],
         };
+        // Set up monitoring if we have a main window
+        if (mainWindow) {
+            this.setupPageMonitoring(mainWindow, session);
+        }
         return session;
     }
     async launchPackaged(opts) {
@@ -393,7 +399,13 @@ export class ElectronDriver {
             mainWindow,
             windows,
             options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
+            networkRequests: [],
+            consoleMessages: [],
         };
+        // Set up monitoring if we have a main window
+        if (mainWindow) {
+            this.setupPageMonitoring(mainWindow, session);
+        }
         return session;
     }
     async isElectronForgeProject(projectPath, packageJsonContent) {
@@ -620,7 +632,13 @@ export class ElectronDriver {
                 windows,
                 options: { ...opts, compressScreenshots: opts.compressScreenshots ?? true },
                 devServerProcess,
+                networkRequests: [],
+                consoleMessages: [],
             };
+            // Set up monitoring if we have a main window
+            if (mainWindow) {
+                this.setupPageMonitoring(mainWindow, session);
+            }
             return session;
         }
         catch (error) {
@@ -1052,6 +1070,32 @@ export class ElectronDriver {
             }
             throw error;
         }
+    }
+    setupPageMonitoring(page, session) {
+        // Network monitoring
+        page.on('request', (request) => {
+            session.networkRequests.push(request);
+        });
+        // Console monitoring
+        page.on('console', (message) => {
+            session.consoleMessages.push(message);
+        });
+    }
+    async getNetworkRequests(session) {
+        const electronSession = session;
+        return electronSession.networkRequests.map(req => ({
+            url: req.url(),
+            method: req.method(),
+            timestamp: Date.now() // Approximation, would need to track actual timestamps
+        }));
+    }
+    async getConsoleMessages(session) {
+        const electronSession = session;
+        return electronSession.consoleMessages.map(msg => ({
+            type: msg.type(),
+            text: msg.text(),
+            timestamp: Date.now() // Approximation, would need to track actual timestamps
+        }));
     }
 }
 //# sourceMappingURL=electron-driver.js.map

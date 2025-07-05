@@ -557,6 +557,16 @@ export class WebMCPServer {
             const { name, arguments: args } = request.params;
             try {
                 const toolArgs = args || {};
+                // Add additional safety wrapper to prevent any uncaught promise rejections
+                const executeToolSafely = async (toolFunction) => {
+                    try {
+                        return await toolFunction();
+                    }
+                    catch (innerError) {
+                        console.error(`[WEB-MCP] Tool execution error in ${name}:`, innerError);
+                        throw innerError;
+                    }
+                };
                 switch (name) {
                     case "browser_launch":
                         return await this.handleBrowserLaunch(toolArgs);
@@ -585,7 +595,7 @@ export class WebMCPServer {
                         const screenshotPath = await this.handleScreenshot(toolArgs.sessionId, toolArgs.path);
                         return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
                     case "evaluate":
-                        const evalResult = await this.handleEvaluate(toolArgs.sessionId, toolArgs.script);
+                        const evalResult = await executeToolSafely(() => this.handleEvaluate(toolArgs.sessionId, toolArgs.script));
                         return { content: [{ type: "text", text: `Result: ${JSON.stringify(evalResult)}` }] };
                     case "wait_for_selector":
                         await this.handleWaitForSelector(toolArgs.sessionId, toolArgs.selector, toolArgs.timeout);

@@ -110,7 +110,31 @@ export class WebDriver {
         if (!pageInfo) {
             throw new Error('No active page found');
         }
-        return await pageInfo.page.evaluate(script);
+        try {
+            // Check if the script contains a return statement outside of a function
+            // If it does, wrap it in an IIFE (Immediately Invoked Function Expression)
+            const trimmedScript = script.trim();
+            const hasReturnOutsideFunction = /^return\s+|[\s;]return\s+/.test(trimmedScript) &&
+                !trimmedScript.startsWith('function') &&
+                !trimmedScript.startsWith('(') &&
+                !trimmedScript.includes('=>');
+            let evalScript = script;
+            if (hasReturnOutsideFunction) {
+                // Wrap in IIFE to make return statement valid
+                evalScript = `(() => { ${script} })()`;
+            }
+            // Execute the script with proper error handling
+            return await pageInfo.page.evaluate(evalScript);
+        }
+        catch (error) {
+            // Handle syntax errors and other evaluation errors gracefully
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Log detailed error for debugging
+            console.error(`[WEB-MCP] JavaScript evaluation error:`, errorMessage);
+            console.error(`[WEB-MCP] Script that failed:`, script);
+            // Re-throw with more context
+            throw new Error(`JavaScript evaluation failed: ${errorMessage}`);
+        }
     }
     async waitForSelector(session, selector, timeout) {
         const webSession = session;

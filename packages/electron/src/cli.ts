@@ -13,14 +13,25 @@ let serverInstance: ElectronMCPServer | null = null;
 // Handle unhandled rejections gracefully to avoid closing MCP transport
 process.on("unhandledRejection", (reason, promise) => {
   console.error("[ELECTRON-MCP] Unhandled Rejection at:", promise, "reason:", reason);
-  // Don't exit - let MCP server handle errors gracefully
+  console.error("[ELECTRON-MCP] MCP transport will remain active despite this error");
+  // Never exit on unhandled rejections - they should not crash the MCP
 });
 
 process.on("uncaughtException", (error) => {
   console.error("[ELECTRON-MCP] Uncaught Exception:", error);
-  // Only exit on truly fatal errors, not on launch failures
-  if (error.message && error.message.includes('MCP Server')) {
+  console.error("[ELECTRON-MCP] Error stack:", error.stack);
+  
+  // Be more conservative about what constitutes a "fatal" error
+  if (error.message && (
+    error.message.includes('MCP Server failed to start') ||
+    error.message.includes('Transport initialization failed') ||
+    error.message.includes('EADDRINUSE') // Port conflicts
+  )) {
+    console.error("[ELECTRON-MCP] Fatal server error detected, exiting...");
     process.exit(1);
+  } else {
+    console.error("[ELECTRON-MCP] Non-fatal exception caught, MCP transport will remain active");
+    // Don't exit for app launch failures, timeouts, or other recoverable errors
   }
 });
 
@@ -51,12 +62,12 @@ const program = new Command();
 program
   .name("circuit-electron")
   .description("Snowfort Circuit Electron MCP - Computer use for webapps and electron apps")
-  .version("0.0.16")
+  .version("0.0.17")
   .option("--name <name>", "Server name for MCP handshake", "circuit-electron")
   .action(async (options) => {
     try {
       console.error("[ELECTRON-MCP] Starting MCP server...");
-      serverInstance = new ElectronMCPServer(options.name, "0.0.16");
+      serverInstance = new ElectronMCPServer(options.name, "0.0.17");
       await serverInstance.run();
       console.error("[ELECTRON-MCP] MCP server running");
     } catch (error) {

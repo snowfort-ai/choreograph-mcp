@@ -1,6 +1,6 @@
 {
   "name": "@snowfort/circuit-web",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Web automation CLI using Playwright for Snowfort Circuit",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",

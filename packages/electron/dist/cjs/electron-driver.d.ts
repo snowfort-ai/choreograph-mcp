@@ -1,4 +1,4 @@
-import { ElectronApplication, Page } from "playwright-core";
+import { ElectronApplication, Page, Request, ConsoleMessage } from "playwright-core";
 import { Driver, LaunchOpts, Session } from "@snowfort/circuit-core";
 import { ChildProcess } from "child_process";
 export interface ElectronLaunchOpts extends LaunchOpts {
@@ -23,6 +23,8 @@ export interface ElectronSession extends Session {
     windows: Map<string, Page>;
     options?: ElectronLaunchOpts;
     devServerProcess?: ChildProcess;
+    networkRequests: Request[];
+    consoleMessages: ConsoleMessage[];
 }
 export declare class ElectronDriver implements Driver {
     private devServerProcesses;
@@ -75,5 +77,17 @@ export declare class ElectronDriver implements Driver {
     clickNth(session: Session, selector: string, index: number, windowId?: string): Promise<void>;
     keyboardType(session: Session, text: string, delay?: number, windowId?: string): Promise<void>;
     waitForLoadState(session: Session, state?: "load" | "domcontentloaded" | "networkidle", timeout?: number, windowId?: string): Promise<void>;
+    private setupPageMonitoring;
+    getNetworkRequests(session: Session): Promise<Array<{
+        url: string;
+        method: string;
+        status?: number;
+        timestamp: number;
+    }>>;
+    getConsoleMessages(session: Session): Promise<Array<{
+        type: string;
+        text: string;
+        timestamp: number;
+    }>>;
 }
 //# sourceMappingURL=electron-driver.d.ts.map

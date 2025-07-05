@@ -1,6 +1,6 @@
 {
   "name": "@snowfort/circuit",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Snowfort Circuit MCP - Computer use for webapps and electron apps",
   "workspaces": [

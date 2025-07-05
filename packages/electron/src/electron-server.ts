@@ -1010,65 +1010,95 @@ export class ElectronMCPServer {
   private async handleAppLaunch(args: any): Promise<ToolResult> {
     let debugInfo: string[] = [];
     
-    try {
-      const opts: ElectronLaunchOpts = {
-        app: args.app,
-        args: args.args,
-        env: args.env,
-        cwd: args.cwd,
-        timeout: args.timeout,
-        mode: args.mode,
-        projectPath: args.projectPath,
-        startScript: args.startScript,
-        electronPath: args.electronPath,
-        compressScreenshots: args.compressScreenshots,
-        screenshotQuality: args.screenshotQuality,
-        disableDevtools: args.disableDevtools,
-        killPortConflicts: args.killPortConflicts,
-        includeSnapshots: args.includeSnapshots ?? false, // Default to false for minimal context
+    // Enhanced error isolation to prevent transport crashes
+    return new Promise<ToolResult>((resolve) => {
+      const executeAppLaunch = async () => {
+        try {
+          const opts: ElectronLaunchOpts = {
+            app: args.app,
+            args: args.args,
+            env: args.env,
+            cwd: args.cwd,
+            timeout: args.timeout,
+            mode: args.mode,
+            projectPath: args.projectPath,
+            startScript: args.startScript,
+            electronPath: args.electronPath,
+            compressScreenshots: args.compressScreenshots,
+            screenshotQuality: args.screenshotQuality,
+            disableDevtools: args.disableDevtools,
+            killPortConflicts: args.killPortConflicts,
+            includeSnapshots: args.includeSnapshots ?? false, // Default to false for minimal context
+          };
+
+          debugInfo.push(`[DEBUG] Launch attempt for app: ${opts.app}`);
+          debugInfo.push(`[DEBUG] Mode: ${opts.mode || 'auto'}`);
+          debugInfo.push(`[DEBUG] Project path: ${opts.projectPath || 'not specified'}`);
+          debugInfo.push(`[DEBUG] CWD: ${opts.cwd || process.cwd()}`);
+
+          // Wrap driver.launch in additional promise isolation
+          const session = await Promise.resolve(this.driver.launch(opts))
+            .catch((launchError) => {
+              // Ensure any driver-level errors are caught and don't escape
+              console.error(`[ELECTRON-MCP] Driver launch error:`, launchError);
+              throw launchError;
+            });
+
+          this.sessions.set(session.id, session);
+
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: `Electron app launched successfully. Session ID: ${session.id}`,
+              },
+            ],
+          });
+        } catch (error) {
+          // Capture additional debug info for the error response
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          console.error(`[ELECTRON-MCP] App launch failed (gracefully handled):`, errorMessage);
+          
+          // Include debug information in the error response so it appears in MCP logs
+          const fullErrorMessage = [
+            `Failed to launch Electron app: ${errorMessage}`,
+            '',
+            '=== DEBUG INFO ===',
+            ...debugInfo,
+            `[DEBUG] Final error: ${errorMessage}`,
+            `[DEBUG] Error type: ${error?.constructor?.name || 'Unknown'}`,
+            `[DEBUG] Error handled gracefully - MCP transport remains active`,
+            '=================='
+          ].join('\n');
+          
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: fullErrorMessage,
+              },
+            ],
+            isError: true,
+          });
+        }
       };
 
-      debugInfo.push(`[DEBUG] Launch attempt for app: ${opts.app}`);
-      debugInfo.push(`[DEBUG] Mode: ${opts.mode || 'auto'}`);
-      debugInfo.push(`[DEBUG] Project path: ${opts.projectPath || 'not specified'}`);
-      debugInfo.push(`[DEBUG] CWD: ${opts.cwd || process.cwd()}`);
-
-      const session = await this.driver.launch(opts);
-      this.sessions.set(session.id, session);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Electron app launched successfully. Session ID: ${session.id}`,
-          },
-        ],
-      };
-    } catch (error) {
-      // Capture additional debug info for the error response
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Include debug information in the error response so it appears in MCP logs
-      const fullErrorMessage = [
-        `Failed to launch Electron app: ${errorMessage}`,
-        '',
-        '=== DEBUG INFO ===',
-        ...debugInfo,
-        `[DEBUG] Final error: ${errorMessage}`,
-        `[DEBUG] Error type: ${error?.constructor?.name || 'Unknown'}`,
-        '=================='
-      ].join('\n');
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: fullErrorMessage,
-          },
-        ],
-        isError: true,
-      };
-    }
+      // Execute with additional async error protection
+      executeAppLaunch().catch((fatalError) => {
+        // Final safety net - should never happen but ensures no exceptions escape
+        console.error(`[ELECTRON-MCP] Fatal error in app launch - this should not happen:`, fatalError);
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: `Critical error in app launch: ${fatalError instanceof Error ? fatalError.message : String(fatalError)}. MCP transport remains active.`,
+            },
+          ],
+          isError: true,
+        });
+      });
+    });
   }
 
   private async handleClick(sessionId: string, selector: string, windowId?: string): Promise<void> {

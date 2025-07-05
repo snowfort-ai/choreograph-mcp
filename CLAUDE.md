@@ -40,6 +40,10 @@
 
 ## Version History
 
+- v0.0.16: Fixed JavaScript evaluation crash in circuit-web
+  - Added automatic IIFE wrapping for return statements outside functions
+  - Enhanced error handling to prevent MCP crashes on syntax errors
+  - Added detailed error logging for debugging
 - v0.0.15: Added windowTimeout, enhanced logging, local test script
 - v0.0.14: Fixed string escaping in smart_click
 - v0.0.13: Added smart_click tool, optional snapshots, filtered snapshots

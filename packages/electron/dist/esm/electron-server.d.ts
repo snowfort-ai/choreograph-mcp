@@ -38,6 +38,8 @@ export declare class ElectronMCPServer {
     private handleContent;
     private handleTextContent;
     private handleClose;
+    private handleNetworkRequests;
+    private handleConsoleMessages;
     cleanup(): Promise<void>;
     run(): Promise<void>;
 }

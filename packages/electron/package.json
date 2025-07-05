@@ -1,6 +1,6 @@
 {
   "name": "@snowfort/circuit-electron",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Electron automation CLI using Playwright for Snowfort Circuit",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
