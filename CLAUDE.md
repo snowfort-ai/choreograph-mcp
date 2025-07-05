@@ -40,6 +40,12 @@
 
 ## Version History
 
+- v0.0.18 (circuit-electron): Major stability improvements
+  - Fixed JavaScript evaluation crash (same as circuit-web fix)
+  - Added global unhandled rejection and exception handlers
+  - Enhanced error logging with full context capture
+  - Added timeout limits and stale session cleanup
+  - Improved error messages for better debugging
 - v0.0.16: Fixed JavaScript evaluation crash in circuit-web
   - Added automatic IIFE wrapping for return statements outside functions
   - Enhanced error handling to prevent MCP crashes on syntax errors

@@ -871,12 +871,47 @@ export class ElectronDriver {
     async evaluate(session, script, windowId) {
         const electronSession = session;
         const window = this.getWindow(electronSession, windowId);
-        return await window.evaluate(script);
+        try {
+            // Check if the script contains a return statement outside of a function
+            // If it does, wrap it in an IIFE (Immediately Invoked Function Expression)
+            const trimmedScript = script.trim();
+            const hasReturnOutsideFunction = /^return\s+|[\s;]return\s+/.test(trimmedScript) &&
+                !trimmedScript.startsWith('function') &&
+                !trimmedScript.startsWith('(') &&
+                !trimmedScript.includes('=>');
+            let evalScript = script;
+            if (hasReturnOutsideFunction) {
+                // Wrap in IIFE to make return statement valid
+                evalScript = `(() => { ${script} })()`;
+            }
+            // Execute the script with proper error handling
+            return await window.evaluate(evalScript);
+        }
+        catch (error) {
+            // Handle syntax errors and other evaluation errors gracefully
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            // Log detailed error for debugging
+            console.error(`[ELECTRON-MCP] JavaScript evaluation error:`, errorMessage);
+            console.error(`[ELECTRON-MCP] Script that failed:`, script);
+            // Re-throw with more context
+            throw new Error(`JavaScript evaluation failed: ${errorMessage}`);
+        }
     }
     async waitForSelector(session, selector, timeout, windowId) {
         const electronSession = session;
         const window = this.getWindow(electronSession, windowId);
-        await window.waitForSelector(selector, { timeout });
+        const effectiveTimeout = timeout || 30000; // Default 30 seconds
+        const maxTimeout = 120000; // Max 2 minutes
+        const finalTimeout = Math.min(effectiveTimeout, maxTimeout);
+        try {
+            await window.waitForSelector(selector, { timeout: finalTimeout });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[ELECTRON-DRIVER] waitForSelector failed after ${finalTimeout}ms:`, errorMessage);
+            console.error(`[ELECTRON-DRIVER] Selector: ${selector}`);
+            throw new Error(`Element not found: ${selector} (waited ${finalTimeout}ms)`);
+        }
     }
     async close(session) {
         const electronSession = session;

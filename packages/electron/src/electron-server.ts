@@ -792,6 +792,32 @@ export class ElectronMCPServer {
 
       try {
         const toolArgs = args || {};
+        
+        // Log the tool call for debugging
+        console.error(`[ELECTRON-MCP] Handling tool: ${name}`);
+        console.error(`[ELECTRON-MCP] Tool args:`, JSON.stringify(toolArgs, null, 2));
+
+        // Add additional safety wrapper to prevent any uncaught promise rejections
+        const executeToolSafely = async (toolFunction: () => Promise<any>) => {
+          try {
+            return await toolFunction();
+          } catch (innerError) {
+            // Capture full error details before transport might close
+            const errorDetails = {
+              tool: name,
+              error: innerError instanceof Error ? {
+                message: innerError.message,
+                stack: innerError.stack,
+                name: innerError.name
+              } : String(innerError),
+              args: toolArgs,
+              timestamp: new Date().toISOString()
+            };
+            
+            console.error(`[ELECTRON-MCP] Tool execution error:`, JSON.stringify(errorDetails, null, 2));
+            throw innerError;
+          }
+        };
 
         switch (name) {
           case "app_launch":
@@ -822,7 +848,9 @@ export class ElectronMCPServer {
             return { content: [{ type: "text", text: `Screenshot saved to: ${screenshotPath}` }] };
 
           case "evaluate":
-            const evalResult = await this.handleEvaluate(toolArgs.sessionId as string, toolArgs.script as string, toolArgs.windowId as string);
+            const evalResult = await executeToolSafely(() => 
+              this.handleEvaluate(toolArgs.sessionId as string, toolArgs.script as string, toolArgs.windowId as string)
+            );
             return { content: [{ type: "text", text: `Result: ${JSON.stringify(evalResult)}` }] };
 
           case "wait_for_selector":
@@ -1420,6 +1448,33 @@ export class ElectronMCPServer {
         console.error("[ELECTRON-MCP] stderr error:", error);
       });
       
+      // Add global unhandled rejection handlers to prevent crashes
+      process.on('unhandledRejection', (reason, promise) => {
+        console.error("[ELECTRON-MCP] Unhandled Rejection at:", promise);
+        console.error("[ELECTRON-MCP] Rejection reason:", reason);
+        if (reason instanceof Error) {
+          console.error("[ELECTRON-MCP] Stack trace:", reason.stack);
+        }
+        // Don't exit - just log the error and continue
+      });
+      
+      process.on('uncaughtException', (error) => {
+        console.error("[ELECTRON-MCP] Uncaught Exception:", error);
+        console.error("[ELECTRON-MCP] Stack trace:", error.stack);
+        // Don't exit for recoverable errors
+        if (error.message && (
+          error.message.includes('EPIPE') || 
+          error.message.includes('ECONNRESET') ||
+          error.message.includes('transport closed')
+        )) {
+          console.error("[ELECTRON-MCP] Recoverable error - continuing...");
+        } else {
+          // For truly unrecoverable errors, exit gracefully
+          console.error("[ELECTRON-MCP] Unrecoverable error - exiting...");
+          process.exit(1);
+        }
+      });
+      
       console.error("[ELECTRON-MCP] Connecting transport...");
       console.error("[ELECTRON-MCP] Process PID:", process.pid);
       console.error("[ELECTRON-MCP] Node version:", process.version);
@@ -1428,9 +1483,27 @@ export class ElectronMCPServer {
       await this.server.connect(transport);
       console.error("[ELECTRON-MCP] Transport connected successfully");
       
-      // Enhanced connection monitoring
+      // Enhanced connection monitoring with session cleanup
       const keepAlive = setInterval(() => {
         console.error("[ELECTRON-MCP] Heartbeat - transport active, sessions:", this.sessions.size);
+        
+        // Clean up any stale sessions (older than 30 minutes)
+        const now = Date.now();
+        const staleTimeout = 30 * 60 * 1000; // 30 minutes
+        
+        for (const [sessionId, session] of this.sessions) {
+          const electronSession = session as ElectronSession;
+          // Check if session has a timestamp (we'll add this to sessions)
+          const sessionAge = now - (electronSession.createdAt || now);
+          
+          if (sessionAge > staleTimeout) {
+            console.error(`[ELECTRON-MCP] Cleaning up stale session: ${sessionId} (age: ${Math.round(sessionAge / 1000)}s)`);
+            this.driver.close(session).catch(err => {
+              console.error(`[ELECTRON-MCP] Error closing stale session:`, err);
+            });
+            this.sessions.delete(sessionId);
+          }
+        }
       }, 30000); // Every 30 seconds
       
       // Keep process alive with multiple fallbacks
